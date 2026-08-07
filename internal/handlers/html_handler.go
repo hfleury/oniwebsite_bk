@@ -44,7 +44,10 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		translations, _ = h.Translator.GetTranslations("en")
 	}
 
-	jsonBytes, _ := json.Marshal(translations)
+	jsonBytes, err := json.Marshal(translations)
+	if err != nil {
+		fmt.Printf("Error marshaling translations for %s: %v\n", lang, err)
+	}
 	jsonString := string(jsonBytes) // The raw JSON to inject
 
 	// Content to Inject
@@ -108,19 +111,9 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Inject Title/Meta
-	if heroTitle, ok := translations["hero_title"].(string); ok {
-		// Replace standard title if present
-		// Assuming index.html has <title>Vite + React + TS</title> or similar
-		// We will matching <title>...</title> loosely
-		// Simple approach: Replace <title>.*</title> with <title>New Title</title>
-		// Note: Regex would be better but expensive-ish.
-		// Let's just do a specific replacement of the default title if we know it.
-		// OR just inject it if we can.
-
-		// For now, to satisfy the compiler and do something useful:
-		newTitleTag := fmt.Sprintf("<title>%s</title>", heroTitle)
+	if metaTitle, ok := translations["meta_title"].(string); ok {
+		newTitleTag := fmt.Sprintf("<title>%s</title>", metaTitle)
 		if strings.Contains(htmlStr, "<title>") && strings.Contains(htmlStr, "</title>") {
-			// Find start and end generic
 			start := strings.Index(htmlStr, "<title>")
 			end := strings.Index(htmlStr, "</title>") + 8
 			htmlStr = htmlStr[:start] + newTitleTag + htmlStr[end:]

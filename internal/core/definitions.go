@@ -8,6 +8,6 @@ type TranslationService interface {
 	// LoadTranslations loads all translation files from the given source.
 	LoadTranslations() error
 	// GetTranslations returns the translations for a specific language.
-	// Returns nil if the language is not found.
+	// Returns a non-nil error (and nil Translations) if the language is not found.
 	GetTranslations(lang string) (Translations, error)
 }

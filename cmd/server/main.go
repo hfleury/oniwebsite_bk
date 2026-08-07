@@ -35,18 +35,8 @@ func main() {
 	translationHandler := handlers.NewTranslationHandler(translator)
 
 	// 3. Setup Router
-	mux := http.NewServeMux()
-
-	// Main Pages (Apply Language Middleware)
 	// We wrap the HTML handler with the language detector
 	langAwareHTML := middleware.LanguageDetectorMiddleware(htmlHandler)
-
-	mux.Handle("/", langAwareHTML)
-	mux.Handle("/pt/", langAwareHTML) // Support trailing slash
-	mux.Handle("/sv/", langAwareHTML)
-
-	// API Routes
-	mux.Handle("/api/translations", translationHandler)
 
 	// Assets / Static Files
 	// If Dev, proxy everything else to Vite
@@ -74,7 +64,7 @@ func main() {
 			}
 
 			// Exact matches or specific prefixes for I18n
-			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt") || strings_HasPrefix(path, "/sv") {
+			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") {
 				langAwareHTML.ServeHTTP(w, r)
 				return
 			}

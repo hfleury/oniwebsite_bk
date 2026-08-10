@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+
 	"oniwebsite_bk/internal/core"
+	"oniwebsite_bk/internal/observability"
 )
 
 type TranslationHandler struct {
@@ -26,7 +29,12 @@ func (h *TranslationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	translations, err := h.Translator.GetTranslations(lang)
 	if err != nil {
 		// Fallback to en
-		translations, _ = h.Translator.GetTranslations("en")
+		var fallbackErr error
+		translations, fallbackErr = h.Translator.GetTranslations("en")
+		if fallbackErr != nil {
+			slog.ErrorContext(r.Context(), "translation fallback to english failed", observability.TraceIDAttr(r.Context()), slog.String("lang", lang), slog.Any("error", fallbackErr))
+			observability.CaptureException(r.Context(), fallbackErr)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

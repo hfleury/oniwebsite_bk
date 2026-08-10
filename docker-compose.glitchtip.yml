@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    volumes: ["pg-data:/var/lib/postgresql"]
+  valkey:
+    image: valkey/valkey:9
+  web:
+    image: glitchtip/glitchtip:6
+    depends_on: [postgres, valkey]
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY: local-dev-only-not-a-real-secret
+      GLITCHTIP_DOMAIN: http://localhost:8000
+      GLITCHTIP_ENABLE_DUCKDB: "False"
+      SERVER_ROLE: all_in_one
+    volumes: ["uploads:/code/uploads"]
+volumes:
+  pg-data: {}
+  uploads: {}

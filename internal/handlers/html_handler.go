@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 
 	"oniwebsite_bk/internal/core"
 	"oniwebsite_bk/internal/middleware"
+	"oniwebsite_bk/internal/observability"
 )
 
 type HTMLHandler struct {
@@ -40,13 +42,15 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	translations, err := h.Translator.GetTranslations(lang)
 	if err != nil {
 		// Fallback to English if failing (or handle error logic)
-		fmt.Printf("Error loading translations for %s: %v\n", lang, err)
+		slog.ErrorContext(r.Context(), "translation load failed, falling back to english", observability.TraceIDAttr(r.Context()), slog.String("lang", lang), slog.Any("error", err))
+		observability.CaptureException(r.Context(), err)
 		translations, _ = h.Translator.GetTranslations("en")
 	}
 
 	jsonBytes, err := json.Marshal(translations)
 	if err != nil {
-		fmt.Printf("Error marshaling translations for %s: %v\n", lang, err)
+		slog.ErrorContext(r.Context(), "translation marshal failed", observability.TraceIDAttr(r.Context()), slog.String("lang", lang), slog.Any("error", err))
+		observability.CaptureException(r.Context(), err)
 	}
 	jsonString := string(jsonBytes) // The raw JSON to inject
 

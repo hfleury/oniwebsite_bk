@@ -2,21 +2,44 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 
 	"oniwebsite_bk/internal/handlers"
 	"oniwebsite_bk/internal/middleware"
+	"oniwebsite_bk/internal/observability"
 	"oniwebsite_bk/internal/services"
 )
 
 func main() {
+	observability.SetupLogger()
+
 	// Flags
 	devMode := flag.Bool("dev", false, "Run in development mode (proxy to Vite)")
 	port := flag.String("port", "8080", "Port to run the server on")
 	flag.Parse()
+
+	dsn := os.Getenv("SENTRY_DSN")
+	env := os.Getenv("SENTRY_ENVIRONMENT")
+	if env == "" {
+		if *devMode {
+			env = "development"
+		} else {
+			env = "production"
+		}
+	}
+	if err := observability.Init(dsn, env); err != nil {
+		slog.Error("failed to initialize sentry", slog.Any("error", err))
+	}
+	defer sentry.Flush(2 * time.Second)
+
+	sh := sentryhttp.New(sentryhttp.Options{Repanic: true})
 
 	// Paths
 	cwd, _ := os.Getwd()
@@ -26,9 +49,12 @@ func main() {
 	// 1. Initialize Services
 	translator := services.NewFileTranslationService(localesDir)
 	if err := translator.LoadTranslations(); err != nil {
-		log.Fatalf("Failed to load translations: %v", err)
+		slog.Error("failed to load translations", slog.Any("error", err))
+		sentry.CaptureException(err)
+		sentry.Flush(2 * time.Second)
+		os.Exit(1)
 	}
-	log.Println("Translations loaded successfully.")
+	slog.Info("translations loaded successfully")
 
 	// 2. Initialize Handlers
 	htmlHandler := handlers.NewHTMLHandler(translator, *devMode, distDir)
@@ -42,7 +68,7 @@ func main() {
 	// If Dev, proxy everything else to Vite
 	// If Prod, serve from dist/
 	if *devMode {
-		log.Println("Running in DEV MODE - Proxying assets to http://localhost:5173")
+		slog.Info("running in dev mode - proxying assets to http://localhost:5173")
 		proxy := handlers.DevProxyHandler("http://localhost:5173")
 		// We can't easily distinguish 404s vs assets in simple mux without pattern matching
 		// essentially everything that is NOT captured above should go to proxy.
@@ -72,11 +98,16 @@ func main() {
 			proxy.ServeHTTP(w, r)
 		})
 
-		log.Printf("Server listening on :%s", *port)
-		log.Fatal(http.ListenAndServe(":"+*port, rootMux))
+		slog.Info("server listening", slog.String("port", *port))
+		if err := http.ListenAndServe(":"+*port, sh.Handle(rootMux)); err != nil {
+			slog.Error("server exited", slog.Any("error", err))
+			sentry.CaptureException(err)
+			sentry.Flush(2 * time.Second)
+			os.Exit(1)
+		}
 
 	} else {
-		log.Println("Running in PRODUCTION MODE - Serving static files from " + distDir)
+		slog.Info("running in production mode - serving static files", slog.String("distDir", distDir))
 		// Serve static files
 		fs := http.FileServer(http.Dir(distDir))
 
@@ -117,8 +148,13 @@ func main() {
 			http.NotFound(w, r)
 		})
 
-		log.Printf("Server listening on :%s", *port)
-		log.Fatal(http.ListenAndServe(":"+*port, rootMux))
+		slog.Info("server listening", slog.String("port", *port))
+		if err := http.ListenAndServe(":"+*port, sh.Handle(rootMux)); err != nil {
+			slog.Error("server exited", slog.Any("error", err))
+			sentry.CaptureException(err)
+			sentry.Flush(2 * time.Second)
+			os.Exit(1)
+		}
 	}
 }
 

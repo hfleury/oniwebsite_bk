@@ -1,8 +1,9 @@
 {
     "meta_title": "Oni Web Officer — Software Empresarial e Modernização de Sistemas Legados",
-    "hero_title_prefix": "Lindos Templates React ",
-    "hero_title_highlight": "para você.",
-    "hero_description": "Nossos templates são fáceis de configurar, entender e personalizar. Componentes totalmente modulares com uma variedade de páginas e componentes.",
+    "meta_description": "Oni Web Officer: uma software house que constrói plataformas orientadas a eventos, moderniza sistemas legados, reduz custos de nuvem e oferece staff augmentation.",
+    "hero_title_prefix": "Software empresarial, modernização de sistemas legados,",
+    "hero_title_highlight": "construído por engenheiros que entregam.",
+    "hero_description": "Plataformas orientadas a eventos, modernização de sistemas legados e capacidade de engenharia sênior — sem a sobrecarga de manter uma equipe interna completa.",
     "hero_email_placeholder": "Seu Endereço de E-mail",
     "hero_cta_button": "Começar Agora",
     "nav_blog": "Blog",

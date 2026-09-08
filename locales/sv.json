@@ -1,8 +1,9 @@
 {
     "meta_title": "Oni Web Officer — Företagsmjukvara och modernisering av äldre system",
-    "hero_title_prefix": "Vackra React-mallar ",
-    "hero_title_highlight": "för dig.",
-    "hero_description": "Våra mallar är enkla att installera, förstå och anpassa. Helt modulära komponenter med en mängd olika sidor och delar.",
+    "meta_description": "Oni Web Officer: en mjukvarubyrå som bygger händelsedrivna plattformar, moderniserar äldre system, sänker molnkostnader och erbjuder konsultförstärkning.",
+    "hero_title_prefix": "Företagsmjukvara, modernisering av äldre system,",
+    "hero_title_highlight": "byggd av ingenjörer som levererar.",
+    "hero_description": "Händelsedrivna plattformar, modernisering av äldre system och erfaren ingenjörskapacitet — utan overheaden av ett eget fullstort team.",
     "hero_email_placeholder": "Din e-postadress",
     "hero_cta_button": "Kom igång",
     "nav_blog": "Blogg",

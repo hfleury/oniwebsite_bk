@@ -1,8 +1,9 @@
 {
     "meta_title": "Oni Web Officer — Enterprise Software & Legacy Modernization",
-    "hero_title_prefix": "Beautiful React Templates ",
-    "hero_title_highlight": "for you.",
-    "hero_description": "Our templates are easy to setup, understand and customize. Fully modular components with a variety of pages and components.",
+    "meta_description": "Oni Web Officer: a software house building event-driven platforms, modernizing legacy systems, cutting cloud costs, and staff augmentation.",
+    "hero_title_prefix": "Enterprise software, legacy modernization,",
+    "hero_title_highlight": "built by engineers who ship.",
+    "hero_description": "Event-driven platforms, legacy modernization, and senior engineering capacity — without the overhead of a full in-house team.",
     "hero_email_placeholder": "Your E-mail Address",
     "hero_cta_button": "Get Started",
     "nav_blog": "Blog",

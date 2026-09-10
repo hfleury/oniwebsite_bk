@@ -10,5 +10,16 @@
     "nav_features": "Features",
     "nav_pricing": "Pricing",
     "nav_login": "Log In",
-    "nav_signup": "Sign Up"
+    "nav_signup": "Sign Up",
+    "services_section_heading": "What We Do",
+    "services_section_subheading": "Four service lines, one senior engineering team behind all of them.",
+    "services_enterprise_software_title": "Enterprise Software Development",
+    "services_enterprise_software_description": "We design and build high-performance, scalable platforms. Specializing in Event-Driven Architecture and Domain-Driven Design (DDD), we create backends that handle massive transaction volumes without failure.",
+    "services_legacy_modernization_title": "Legacy System Modernization",
+    "services_legacy_modernization_description": "We rescue businesses from technical debt. Our squads analyze outdated systems (Node.js, PHP, Legacy Monoliths), refactor critical paths, and migrate infrastructure to modern, performant standards.",
+    "services_cloud_devops_title": "Cloud Architecture & Cost Audit",
+    "services_cloud_devops_description": "We manage your cloud so you can focus on business. From cutting operational costs to implementing automated CI/CD pipelines (Kubernetes/Helm), we ensure your infrastructure is secure and efficient.",
+    "services_staff_augmentation_title": "Managed IT Staff Augmentation",
+    "services_staff_augmentation_description": "Scale your tech team without the risk. We provide vetted developers managed by senior software architects. We don't just provide heads; we oversee code quality, testing culture, and delivery.",
+    "services_staff_augmentation_proof_point": "We operate today as a delivery partner to IT-services primes, staffing and delivering work for their enterprise end clients — the same offshore delivery model available to you, direct."
 }

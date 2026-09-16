@@ -32,6 +32,47 @@ func NewHTMLHandler(t core.TranslationService, isDev bool, distDir string) *HTML
 	}
 }
 
+// stripLocalePrefix removes a leading "/pt" or "/sv" locale prefix from path,
+// mirroring the prefix check in middleware.LanguageDetectorMiddleware.
+func stripLocalePrefix(path string) string {
+	if strings.HasPrefix(path, "/pt") {
+		return strings.TrimPrefix(path, "/pt")
+	}
+	if strings.HasPrefix(path, "/sv") {
+		return strings.TrimPrefix(path, "/sv")
+	}
+	return path
+}
+
+// extractServiceSlug returns the first path segment after "/services/" in
+// path (locale prefix stripped first), or "" if path isn't a service page.
+func extractServiceSlug(path string) string {
+	path = stripLocalePrefix(path)
+	const prefix = "/services/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
+		rest = rest[:slashIdx]
+	}
+	return rest
+}
+
+// resolveMeta looks up a service-specific "services_<slug>_meta_<field>" key
+// (slug hyphens converted to underscores), falling back to the generic
+// "meta_<field>" key when slug is empty or the specific key isn't present.
+func resolveMeta(translations core.Translations, slug, field string) (string, bool) {
+	if slug != "" {
+		key := "services_" + strings.ReplaceAll(slug, "-", "_") + "_meta_" + field
+		if value, ok := translations[key].(string); ok {
+			return value, true
+		}
+	}
+	value, ok := translations["meta_"+field].(string)
+	return value, ok
+}
+
 func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lang, ok := r.Context().Value(middleware.CtxLanguageKey).(string)
 	if !ok {
@@ -115,7 +156,8 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Inject Title/Meta
-	if metaTitle, ok := translations["meta_title"].(string); ok {
+	slug := extractServiceSlug(r.URL.Path)
+	if metaTitle, ok := resolveMeta(translations, slug, "title"); ok {
 		newTitleTag := fmt.Sprintf("<title>%s</title>", metaTitle)
 		if strings.Contains(htmlStr, "<title>") && strings.Contains(htmlStr, "</title>") {
 			start := strings.Index(htmlStr, "<title>")

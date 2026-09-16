@@ -21,5 +21,13 @@
     "services_cloud_devops_description": "We manage your cloud so you can focus on business. From cutting operational costs to implementing automated CI/CD pipelines (Kubernetes/Helm), we ensure your infrastructure is secure and efficient.",
     "services_staff_augmentation_title": "Managed IT Staff Augmentation",
     "services_staff_augmentation_description": "Scale your tech team without the risk. We provide vetted developers managed by senior software architects. We don't just provide heads; we oversee code quality, testing culture, and delivery.",
-    "services_staff_augmentation_proof_point": "We operate today as a delivery partner to IT-services primes, staffing and delivering work for their enterprise end clients — the same offshore delivery model available to you, direct."
+    "services_staff_augmentation_proof_point": "We operate today as a delivery partner to IT-services primes, staffing and delivering work for their enterprise end clients — the same offshore delivery model available to you, direct.",
+    "services_enterprise_software_meta_title": "Enterprise Software Development | Oni Web Officer",
+    "services_enterprise_software_meta_description": "Event-driven, DDD-based platforms built to handle massive transaction volumes without failure. Enterprise software engineering from Oni Web Officer.",
+    "services_legacy_modernization_meta_title": "Legacy System Modernization Services | Oni Web Officer",
+    "services_legacy_modernization_meta_description": "Rescue your business from technical debt. We refactor outdated systems and migrate critical infrastructure to modern, performant standards.",
+    "services_cloud_devops_meta_title": "Cloud Cost Optimization & DevOps | Oni Web Officer",
+    "services_cloud_devops_meta_description": "Cut cloud costs and automate CI/CD with Kubernetes and Helm. We keep your infrastructure secure, efficient, and built to scale.",
+    "services_staff_augmentation_meta_title": "Managed IT Staff Augmentation | Oni Web Officer",
+    "services_staff_augmentation_meta_description": "Scale your tech team without the risk. Vetted developers managed by senior architects, with code quality and delivery fully overseen."
 }

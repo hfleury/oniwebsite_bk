@@ -90,7 +90,7 @@ func main() {
 			}
 
 			// Exact matches or specific prefixes for I18n
-			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") {
+			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") || strings_HasPrefix(path, "/services/") {
 				langAwareHTML.ServeHTTP(w, r)
 				return
 			}
@@ -120,7 +120,7 @@ func main() {
 			path := r.URL.Path
 
 			// I18n Routes
-			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") {
+			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") || strings_HasPrefix(path, "/services/") {
 				langAwareHTML.ServeHTTP(w, r)
 				return
 			}

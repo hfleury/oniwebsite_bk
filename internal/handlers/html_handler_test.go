@@ -266,6 +266,131 @@ func TestHTMLHandler_ServeHTTP_LocalePrefixedServiceSlugResolves(t *testing.T) {
 	}
 }
 
+func TestHTMLHandler_ServeHTTP_MetaDescription(t *testing.T) {
+	t.Run("generic meta_description is escaped and injected", func(t *testing.T) {
+		distDir := writeIndexHTML(t, fixtureIndexHTML)
+		fake := &fakeTranslationService{data: map[string]core.Translations{
+			"en": {"meta_description": `Tom & Jerry <say> "hi"`},
+		}}
+		handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+		req := requestWithLang("en")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		body := w.Body.String()
+		wantTag := `<meta name="description" content="Tom &amp; Jerry &lt;say&gt; &#34;hi&#34;">`
+		if !strings.Contains(body, wantTag) {
+			t.Errorf("body missing escaped meta description tag %q, got: %s", wantTag, body)
+		}
+		if strings.Contains(body, `Tom & Jerry <say> "hi"`) {
+			t.Errorf("body contains raw unescaped meta description, got: %s", body)
+		}
+	})
+
+	t.Run("no meta_description key omits the tag entirely", func(t *testing.T) {
+		distDir := writeIndexHTML(t, fixtureIndexHTML)
+		fake := &fakeTranslationService{data: map[string]core.Translations{
+			"en": {"meta_title": "Some Title"},
+		}}
+		handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+		req := requestWithLang("en")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		body := w.Body.String()
+		if strings.Contains(body, `<meta name="description"`) {
+			t.Errorf("expected no meta description tag, got: %s", body)
+		}
+	})
+}
+
+func TestHTMLHandler_ServeHTTP_PerServiceMetaOverride(t *testing.T) {
+	distDir := writeIndexHTML(t, fixtureIndexHTML)
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"en": {
+			"meta_title":       "Generic Title",
+			"meta_description": "Generic Description",
+			"services_enterprise_software_meta_title":       "Enterprise Software Development | Oni Web Officer",
+			"services_enterprise_software_meta_description": "Specific Description",
+		},
+	}}
+	handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+	req := requestWithLangAndPath("en", "/services/enterprise-software")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if !strings.Contains(body, "<title>Enterprise Software Development | Oni Web Officer</title>") {
+		t.Errorf("expected per-service title, got: %s", body)
+	}
+	if !strings.Contains(body, `<meta name="description" content="Specific Description">`) {
+		t.Errorf("expected per-service meta description, got: %s", body)
+	}
+	if strings.Contains(body, "<title>Generic Title</title>") {
+		t.Errorf("did not expect generic title, got: %s", body)
+	}
+	if strings.Contains(body, `content="Generic Description"`) {
+		t.Errorf("did not expect generic meta description, got: %s", body)
+	}
+}
+
+func TestHTMLHandler_ServeHTTP_HreflangLinks(t *testing.T) {
+	distDir := writeIndexHTML(t, fixtureIndexHTML)
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"pt": {"meta_title": "Titulo"},
+	}}
+	handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+	req := requestWithLangAndPath("pt", "/pt/services/foo")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	body := w.Body.String()
+
+	wantEnHref := "http://example.com/services/foo"
+	wantTags := map[string]string{
+		"en":        fmt.Sprintf(`<link rel="alternate" hreflang="en" href="%s">`, wantEnHref),
+		"pt":        `<link rel="alternate" hreflang="pt" href="http://example.com/pt/services/foo">`,
+		"sv":        `<link rel="alternate" hreflang="sv" href="http://example.com/sv/services/foo">`,
+		"x-default": fmt.Sprintf(`<link rel="alternate" hreflang="x-default" href="%s">`, wantEnHref),
+	}
+	for locale, wantTag := range wantTags {
+		if !strings.Contains(body, wantTag) {
+			t.Errorf("body missing %s hreflang tag %q, got: %s", locale, wantTag, body)
+		}
+	}
+}
+
+func TestHTMLHandler_ServeHTTP_OrganizationJSONLD(t *testing.T) {
+	distDir := writeIndexHTML(t, fixtureIndexHTML)
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"en": {"meta_title": "Some Title"},
+	}}
+	handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+	req := requestWithLang("en")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if !strings.Contains(body, `<script type="application/ld+json">`) {
+		t.Errorf("body missing JSON-LD script tag, got: %s", body)
+	}
+	for _, want := range []string{
+		`"@context":"https://schema.org"`,
+		`"@type":"Organization"`,
+		`"name":"Oni Web Officer"`,
+		`"Golang"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing JSON-LD substring %q, got: %s", want, body)
+		}
+	}
+}
+
 func TestResolveMeta(t *testing.T) {
 	tests := []struct {
 		name         string

@@ -2,11 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev, qa]
   pull_request:
-    branches: [main]
+    branches: [main, dev, qa]
 
 jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck deploy/bootstrap.sh deploy/deploy-frontend deploy/deploy-backend
+
   vet-build-test:
     runs-on: ubuntu-latest
     steps:
@@ -17,3 +23,51 @@ jobs:
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
+      - run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o server ./cmd/server
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend
+          path: |
+            server
+            locales/
+          if-no-files-found: error
+
+  deploy:
+    needs: [vet-build-test, shellcheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+      DOMAIN: ${{ vars.DOMAIN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host *\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+      - name: Upload build to droplet
+        run: |
+          rsync -az server "deploy@$DROPLET_HOST:/opt/oni/oniwebsite_bk/server.new"
+          rsync -az --delete locales/ "deploy@$DROPLET_HOST:/opt/oni/oniwebsite_bk/locales.new/"
+      - name: Swap, restart and health-check
+        run: ssh "deploy@$DROPLET_HOST" /usr/local/sbin/deploy-backend
+      - name: Smoke test
+        run: |
+          for path in / /pt/ /sv/; do
+            curl -fsS --max-time 15 --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null "https://$DOMAIN$path"
+          done

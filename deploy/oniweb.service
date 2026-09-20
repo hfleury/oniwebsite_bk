@@ -1,0 +1,25 @@
+[Unit]
+Description=Oni Web Officer site (Go server)
+After=network.target
+
+[Service]
+Type=simple
+User=oni
+Group=oni
+WorkingDirectory=/opt/oni/oniwebsite_bk
+ExecStart=/opt/oni/oniwebsite_bk/server -port 8080
+# Optional file (leading "-"): holds SENTRY_DSN, created empty by bootstrap.sh and set by hand.
+EnvironmentFile=-/etc/oni/oniweb.env
+Restart=always
+RestartSec=2
+
+# The app writes nothing to disk, so the whole filesystem can stay read-only.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

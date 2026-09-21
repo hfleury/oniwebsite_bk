@@ -22,6 +22,10 @@
     "services_staff_augmentation_title": "Managed IT Staff Augmentation",
     "services_staff_augmentation_description": "Scale your tech team without the risk. We provide vetted developers managed by senior software architects. We don't just provide heads; we oversee code quality, testing culture, and delivery.",
     "services_staff_augmentation_proof_point": "We operate today as a delivery partner to IT-services primes, staffing and delivering work for their enterprise end clients — the same offshore delivery model available to you, direct.",
+    "services_ai_engineering_title": "AI Engineering",
+    "services_ai_engineering_description": "We build LLM, RAG and agent features into production backends, not demos. Our senior engineers handle the hard parts (evaluation, retrieval quality, observability, guardrails and cost control).",
+    "services_security_compliance_title": "Security & Compliance Engineering",
+    "services_security_compliance_description": "We build compliance-ready engineering into how you ship. Our squads set up secure SDLC practices (threat modeling, dependency scanning, SBOMs), incident-reporting tooling and compliance-evidence automation.",
     "services_enterprise_software_meta_title": "Enterprise Software Development | Oni Web Officer",
     "services_enterprise_software_meta_description": "Event-driven, DDD-based platforms built to handle massive transaction volumes without failure. Enterprise software engineering from Oni Web Officer.",
     "services_legacy_modernization_meta_title": "Legacy System Modernization Services | Oni Web Officer",
@@ -29,5 +33,9 @@
     "services_cloud_devops_meta_title": "Cloud Cost Optimization & DevOps | Oni Web Officer",
     "services_cloud_devops_meta_description": "Cut cloud costs and automate CI/CD with Kubernetes and Helm. We keep your infrastructure secure, efficient, and built to scale.",
     "services_staff_augmentation_meta_title": "Managed IT Staff Augmentation | Oni Web Officer",
-    "services_staff_augmentation_meta_description": "Scale your tech team without the risk. Vetted developers managed by senior architects, with code quality and delivery fully overseen."
+    "services_staff_augmentation_meta_description": "Scale your tech team without the risk. Vetted developers managed by senior architects, with code quality and delivery fully overseen.",
+    "services_ai_engineering_meta_title": "AI Engineering for Production | Oni Web Officer",
+    "services_ai_engineering_meta_description": "LLM, RAG and agents built into production backends, not demos. Senior AI engineering with evaluation, observability and cost control built in.",
+    "services_security_compliance_meta_title": "Security & Compliance Engineering | Oni Web Officer",
+    "services_security_compliance_meta_description": "Compliance-ready engineering: secure SDLC, SBOMs, incident-reporting tooling and compliance-evidence automation. Built by senior engineers."
 }

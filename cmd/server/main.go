@@ -90,7 +90,7 @@ func main() {
 			}
 
 			// Exact matches or specific prefixes for I18n
-			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") || strings_HasPrefix(path, "/services/") {
+			if isPageRoute(path) {
 				langAwareHTML.ServeHTTP(w, r)
 				return
 			}
@@ -120,7 +120,7 @@ func main() {
 			path := r.URL.Path
 
 			// I18n Routes
-			if path == "/" || path == "/index.html" || strings_HasPrefix(path, "/pt/") || strings_HasPrefix(path, "/sv/") || strings_HasPrefix(path, "/services/") {
+			if isPageRoute(path) {
 				langAwareHTML.ServeHTTP(w, r)
 				return
 			}
@@ -156,6 +156,17 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+// isPageRoute reports whether path is an HTML page served through the
+// language-aware handler: the root, /index.html, the locale roots with and
+// without a trailing slash (the language dropdown links to the bare /pt and
+// /sv), anything nested under them, and /services/....
+func isPageRoute(path string) bool {
+	return path == "/" || path == "/index.html" ||
+		path == "/pt" || strings_HasPrefix(path, "/pt/") ||
+		path == "/sv" || strings_HasPrefix(path, "/sv/") ||
+		strings_HasPrefix(path, "/services/")
 }
 
 // Helper strict check for simple logic

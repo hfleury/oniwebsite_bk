@@ -8,7 +8,8 @@
 #   ONI_DOMAIN     public hostname Caddy serves and gets a certificate for
 #   DEPLOY_PUBKEY  ed25519 public key (one line) that CI uses to log in as `deploy`
 # Optional environment:
-#   ADMIN_USER     human sudo user that replaces root login (default: admin)
+#   ADMIN_USER     human sudo user that replaces root login (default: oniadmin).
+#                  Must not match an existing group: Ubuntu ships `admin`, so that name is rejected.
 #
 # The service is enabled but not started: it needs locales/ and dist/, which
 # the first CI deploys provide. /etc/oni/oniweb.env (SENTRY_DSN) is created
@@ -18,7 +19,7 @@ set -euo pipefail
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ONI_DOMAIN="${ONI_DOMAIN:-}"
 DEPLOY_PUBKEY="${DEPLOY_PUBKEY:-}"
-ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_USER="${ADMIN_USER:-oniadmin}"
 
 APP_ROOT=/opt/oni
 SWAPFILE=/swapfile
@@ -52,6 +53,11 @@ check_environment() {
     die "DEPLOY_PUBKEY must be a single-line ssh-ed25519 public key"
 
   [[ $ADMIN_USER =~ ^[a-z][a-z0-9_-]*$ ]] || die "ADMIN_USER is not a valid username: $ADMIN_USER"
+  # useradd creates a same-named group and aborts if one exists (Ubuntu ships `admin`).
+  # Catch it here, before any host state changes, instead of failing halfway through.
+  if ! id -u "$ADMIN_USER" >/dev/null 2>&1 && getent group "$ADMIN_USER" >/dev/null; then
+    die "ADMIN_USER $ADMIN_USER collides with an existing group; choose another name"
+  fi
 }
 
 install_packages() {

@@ -217,3 +217,156 @@ func TestLanguageDetectorMiddleware_UnrecognizedPathDefaultsEnglish(t *testing.T
 		t.Errorf("context language = %v, want %q", rec.lang, "en")
 	}
 }
+
+func requestWithLanguageCookie(path, acceptLanguage, cookieValue string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if acceptLanguage != "" {
+		req.Header.Set("Accept-Language", acceptLanguage)
+	}
+	if cookieValue != "" {
+		req.AddCookie(&http.Cookie{Name: LanguageCookieName, Value: cookieValue})
+	}
+	return req
+}
+
+func TestLanguageDetectorMiddleware_CookieOverridesAcceptLanguage(t *testing.T) {
+	tests := []struct {
+		name           string
+		acceptLanguage string
+		cookie         string
+		wantLocation   string
+	}{
+		{"pt cookie beats english browser", "en", "pt", "/pt/"},
+		{"sv cookie beats portuguese browser", "pt", "sv", "/sv/"},
+		{"pt cookie without accept-language", "", "pt", "/pt/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &nextCall{}
+			handler := LanguageDetectorMiddleware(newRecordingNext(rec))
+
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, requestWithLanguageCookie("/", tt.acceptLanguage, tt.cookie))
+
+			if rec.called {
+				t.Fatal("expected next handler NOT to be called")
+			}
+			if w.Code != http.StatusFound {
+				t.Errorf("status = %d, want %d", w.Code, http.StatusFound)
+			}
+			if got := w.Header().Get("Location"); got != tt.wantLocation {
+				t.Errorf("Location = %q, want %q", got, tt.wantLocation)
+			}
+		})
+	}
+}
+
+func TestLanguageDetectorMiddleware_EnglishCookieStopsRedirectForPortugueseBrowser(t *testing.T) {
+	rec := &nextCall{}
+	handler := LanguageDetectorMiddleware(newRecordingNext(rec))
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, requestWithLanguageCookie("/", "pt", "en"))
+
+	if !rec.called {
+		t.Fatal("expected next handler to be called (no redirect)")
+	}
+	if rec.lang != "en" {
+		t.Errorf("context language = %v, want %q", rec.lang, "en")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestLanguageDetectorMiddleware_InvalidCookieFallsBackToAcceptLanguage(t *testing.T) {
+	rec := &nextCall{}
+	handler := LanguageDetectorMiddleware(newRecordingNext(rec))
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, requestWithLanguageCookie("/", "pt", "xx"))
+
+	if rec.called {
+		t.Fatal("expected next handler NOT to be called")
+	}
+	if got, want := w.Header().Get("Location"), "/pt/"; got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestLanguageDetectorMiddleware_CookieAppliesToIndexHTML(t *testing.T) {
+	rec := &nextCall{}
+	handler := LanguageDetectorMiddleware(newRecordingNext(rec))
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, requestWithLanguageCookie("/index.html", "en", "sv"))
+
+	if rec.called {
+		t.Fatal("expected next handler NOT to be called")
+	}
+	if got, want := w.Header().Get("Location"), "/sv/"; got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestLanguageDetectorMiddleware_CookieIgnoredOnDeepLinks(t *testing.T) {
+	rec := &nextCall{}
+	handler := LanguageDetectorMiddleware(newRecordingNext(rec))
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, requestWithLanguageCookie("/services/staff-augmentation", "pt", "pt"))
+
+	if !rec.called {
+		t.Fatal("expected next handler to be called (no redirect on deep links)")
+	}
+	if rec.lang != "en" {
+		t.Errorf("context language = %v, want %q", rec.lang, "en")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if got := w.Header().Get("Vary"); got != "" {
+		t.Errorf("Vary = %q, want it unset off the root path", got)
+	}
+}
+
+func TestLanguageDetectorMiddleware_URLPrefixOverridesCookie(t *testing.T) {
+	rec := &nextCall{}
+	handler := LanguageDetectorMiddleware(newRecordingNext(rec))
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, requestWithLanguageCookie("/sv/", "", "pt"))
+
+	if !rec.called {
+		t.Fatal("expected next handler to be called")
+	}
+	if rec.lang != "sv" {
+		t.Errorf("context language = %v, want %q", rec.lang, "sv")
+	}
+}
+
+func TestLanguageDetectorMiddleware_RootSetsVaryHeader(t *testing.T) {
+	tests := []struct {
+		name           string
+		acceptLanguage string
+		cookie         string
+	}{
+		{"redirect from accept-language", "pt", ""},
+		{"redirect from cookie", "en", "sv"},
+		{"english fall-through", "en", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := LanguageDetectorMiddleware(newRecordingNext(&nextCall{}))
+
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, requestWithLanguageCookie("/", tt.acceptLanguage, tt.cookie))
+
+			if got, want := w.Header().Get("Vary"), "Accept-Language, Cookie"; got != want {
+				t.Errorf("Vary = %q, want %q", got, want)
+			}
+		})
+	}
+}

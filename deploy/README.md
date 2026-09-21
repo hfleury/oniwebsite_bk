@@ -34,10 +34,12 @@ Droplet layout:
    ```sh
    ONI_DOMAIN=example.com DEPLOY_PUBKEY="$(cat oni-deploy.pub)" ./deploy/bootstrap.sh
    ```
-   Optional `ADMIN_USER` (default `admin`). The script creates that sudo user from root's
+   Optional `ADMIN_USER` (default `oniadmin`). The script creates that sudo user from root's
    `authorized_keys` **before** it disables root login and password auth, and refuses to
-   touch sshd if that user has no key. If you ever lock yourself out, use the DigitalOcean
-   console. From now on log in as `admin`, not `root`.
+   touch sshd if that user has no key. The name must not match an existing group, so
+   `admin` is rejected on Ubuntu, which already ships a group of that name. If you ever
+   lock yourself out, use the DigitalOcean console. From now on log in as that user
+   (`oniadmin` by default), not `root`.
 5. Put the error-tracking DSN in the env file, then restart later via a deploy:
    ```sh
    echo 'SENTRY_DSN=https://...' | sudo tee /etc/oni/oniweb.env >/dev/null
@@ -69,8 +71,14 @@ Droplet layout:
 Deploy the **frontend before the backend**. A backend deployed first has no `dist/` to
 serve, so `/` returns 500 and the smoke test fails.
 
-1. Merge to `main` in `oniwebsite`, wait for its `deploy` job.
-2. Merge to `main` in `oniwebsite_bk`, wait for its `deploy` job.
+1. Merge to `main` in `oniwebsite`, wait for its `deploy` job. Expect its **Smoke test** step
+   to fail with a 502 on this very first deploy: the release is already uploaded and `dist`
+   already swapped, but `oniweb` is enabled and not running yet (it needs the backend build),
+   so Caddy has nothing to proxy to.
+2. Merge to `main` in `oniwebsite_bk`, wait for its `deploy` job. It starts the service, and
+   its smoke test should pass.
+3. Re-run the failed frontend `deploy` job (Actions → the run → **Re-run failed jobs**) so it
+   turns green now that the service is up.
 
 Afterwards, frontend and backend deploy independently on their own merges. A frontend that
 ships slightly before its backend may show raw translation keys until the backend deploy
@@ -78,7 +86,7 @@ finishes, and an already-open tab may 404 on old hashed assets until reload; bot
 
 ## Rollback
 
-Run on the droplet as `admin`.
+Run on the droplet as the admin user (`ADMIN_USER`, default `oniadmin`).
 
 **Frontend** (needs the release to still be among the last 3 in `releases/`):
 ```sh

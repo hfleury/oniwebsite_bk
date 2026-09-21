@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Point the live frontend at an already-uploaded release.
+#
+# Usage: deploy-frontend <git-sha>
+#
+# CI rsyncs the built dist/ to $ONI_ROOT/oniwebsite/releases/<sha>/ first; this
+# script then atomically repoints the `dist` symlink and prunes old releases.
+# No service restart is needed: the Go server reads dist/ on every request.
+#
+# Installed root-owned in /usr/local/sbin and run as the `deploy` user over SSH.
+# ONI_ROOT is overridable so the script can be dry-run against a temp tree.
+set -euo pipefail
+
+ROOT="${ONI_ROOT:-/opt/oni}"
+APP_DIR="$ROOT/oniwebsite"
+KEEP_RELEASES=3
+
+sha="${1:-}"
+# The argument arrives over SSH unfiltered, so it must be a bare git sha.
+if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+  echo "usage: deploy-frontend <40-character lowercase hex git sha>" >&2
+  exit 2
+fi
+
+cd "$APP_DIR"
+
+if [[ ! -f "releases/$sha/index.html" ]]; then
+  echo "release $sha is missing or incomplete: releases/$sha/index.html not found" >&2
+  exit 1
+fi
+
+# Newest-deployed ordering for pruning relies on the directory mtime.
+touch "releases/$sha"
+
+ln -sfn "releases/$sha" dist.new
+mv -T dist.new dist
+echo "dist -> releases/$sha"
+
+prune_old_releases() {
+  local current
+  current="$(readlink dist)"
+
+  local -a newest_first
+  mapfile -t newest_first < <(
+    find releases -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' | sort -rn | cut -d' ' -f2
+  )
+
+  local name
+  for name in "${newest_first[@]:KEEP_RELEASES}"; do
+    if [[ ! $name =~ ^[0-9a-f]{40}$ || "releases/$name" == "$current" ]]; then
+      continue
+    fi
+    rm -rf -- "releases/$name"
+    echo "pruned releases/$name"
+  done
+}
+
+prune_old_releases

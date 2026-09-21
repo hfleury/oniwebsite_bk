@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Swap in a freshly uploaded backend build, restart the service and verify it.
+#
+# Usage: deploy-backend
+#
+# CI rsyncs the new binary to $ONI_ROOT/oniwebsite_bk/server.new and the
+# translations to locales.new/. This script keeps the current build as
+# server.prev / locales.prev, swaps the new one in, restarts oniweb and polls
+# the health URL. If the new build never becomes healthy it restores the
+# previous one (or stops the service on a first-ever deploy) and exits non-zero.
+#
+# Installed root-owned in /usr/local/sbin and run as the `deploy` user over SSH;
+# its only sudo right is `systemctl restart oniweb` (plus stop, for a failed first deploy).
+# ONI_ROOT, HEALTH_URL and HEALTH_ATTEMPTS are overridable so the script can be
+# dry-run against a temp tree with a stub systemctl.
+set -euo pipefail
+
+ROOT="${ONI_ROOT:-/opt/oni}"
+APP_DIR="$ROOT/oniwebsite_bk"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/translations?lang=en}"
+HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-10}"
+SERVICE=oniweb
+
+cd "$APP_DIR"
+
+if [[ ! -f server.new || ! -d locales.new ]]; then
+  echo "nothing to deploy: server.new and locales.new/ must both exist in $APP_DIR" >&2
+  exit 1
+fi
+
+restart_service() {
+  sudo systemctl restart "$SERVICE"
+}
+
+# Healthy = HTTP 200 and a body other than JSON null. The translations handler
+# answers 200 with `null` when locales/ is empty, so the status alone proves
+# only that the process is up.
+is_healthy() {
+  local body
+  body="$(curl -fsS --max-time 2 "$HEALTH_URL")" || return 1
+  [[ -n $body && $body != "null" ]]
+}
+
+wait_until_healthy() {
+  local attempt
+  for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt++)); do
+    if is_healthy; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+install_new_build() {
+  if [[ -f server ]]; then
+    cp -p server server.prev
+  fi
+  if [[ -d locales ]]; then
+    rm -rf locales.prev
+    mv locales locales.prev
+  fi
+  mv locales.new locales
+  chmod 0755 server.new
+  mv -f server.new server
+}
+
+restore_previous_build() {
+  # Copy rather than move so server.prev / locales.prev stay available.
+  cp -p server.prev server.rollback
+  mv -f server.rollback server
+  rm -rf locales
+  cp -a locales.prev locales
+}
+
+# Decide before swapping: after the swap `server`/`locales` always exist.
+has_previous_build=false
+if [[ -f server && -d locales ]]; then
+  has_previous_build=true
+fi
+
+install_new_build
+restart_service
+
+if wait_until_healthy; then
+  echo "backend deployed and healthy"
+  exit 0
+fi
+
+echo "new backend failed the health check at $HEALTH_URL" >&2
+
+if [[ $has_previous_build == true ]]; then
+  echo "rolling back to server.prev / locales.prev" >&2
+  restore_previous_build
+  restart_service
+  if wait_until_healthy; then
+    echo "rollback complete, previous backend is serving" >&2
+  else
+    echo "WARNING: previous backend is not healthy after rollback either" >&2
+  fi
+else
+  echo "no previous build to restore; stopping $SERVICE" >&2
+  sudo systemctl stop "$SERVICE"
+fi
+
+exit 1

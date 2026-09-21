@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -30,6 +31,91 @@ func NewHTMLHandler(t core.TranslationService, isDev bool, distDir string) *HTML
 		DevTarget:  "http://localhost:5173", // Standard Vite port
 		DistDir:    distDir,
 	}
+}
+
+// stripLocalePrefix removes a leading "/pt" or "/sv" locale prefix from path,
+// mirroring the prefix check in middleware.LanguageDetectorMiddleware.
+func stripLocalePrefix(path string) string {
+	if strings.HasPrefix(path, "/pt") {
+		return strings.TrimPrefix(path, "/pt")
+	}
+	if strings.HasPrefix(path, "/sv") {
+		return strings.TrimPrefix(path, "/sv")
+	}
+	return path
+}
+
+// extractServiceSlug returns the first path segment after "/services/" in
+// path (locale prefix stripped first), or "" if path isn't a service page.
+func extractServiceSlug(path string) string {
+	path = stripLocalePrefix(path)
+	const prefix = "/services/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
+		rest = rest[:slashIdx]
+	}
+	return rest
+}
+
+// resolveScheme determines the request scheme, preferring the
+// X-Forwarded-Proto header (set by a reverse proxy terminating TLS in front
+// of this process) over r.TLS, since main.go only ever calls
+// http.ListenAndServe and never terminates TLS itself.
+func resolveScheme(r *http.Request) string {
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		return proto
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+// withLocalePrefix returns bare unchanged for the "en" locale, otherwise
+// prefixes it with "/<locale>", mirroring the prefix stripLocalePrefix removes.
+func withLocalePrefix(bare, locale string) string {
+	if locale == "en" {
+		return bare
+	}
+	return "/" + locale + bare
+}
+
+// resolveMeta looks up a service-specific "services_<slug>_meta_<field>" key
+// (slug hyphens converted to underscores), falling back to the generic
+// "meta_<field>" key when slug is empty or the specific key isn't present.
+func resolveMeta(translations core.Translations, slug, field string) (string, bool) {
+	if slug != "" {
+		key := "services_" + strings.ReplaceAll(slug, "-", "_") + "_meta_" + field
+		if value, ok := translations[key].(string); ok {
+			return value, true
+		}
+	}
+	value, ok := translations["meta_"+field].(string)
+	return value, ok
+}
+
+// siteKnowsAbout is the static, non-translation-driven list of technologies
+// advertised in the site-wide Organization JSON-LD schema.
+var siteKnowsAbout = []string{
+	"Golang",
+	"Python",
+	"Kafka",
+	"Docker",
+	"Kubernetes",
+	"AWS",
+	"Domain-Driven Design",
+	"Event-Driven Architecture",
+}
+
+type organizationSchema struct {
+	Context    string   `json:"@context"`
+	Type       string   `json:"@type"`
+	Name       string   `json:"name"`
+	URL        string   `json:"url"`
+	KnowsAbout []string `json:"knowsAbout"`
 }
 
 func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +192,42 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	htmlStr = strings.Replace(htmlStr, "<html>", fmt.Sprintf("<html lang=\"%s\">", lang), 1) // Fallback
 
 	// 2. Inject Data
+	slug := extractServiceSlug(r.URL.Path)
 	injection := fmt.Sprintf("<script>window.__INITIAL_STATE__ = %s;</script>", jsonString)
+
+	// 2a. Meta description
+	if metaDescription, ok := resolveMeta(translations, slug, "description"); ok {
+		injection += fmt.Sprintf("<meta name=\"description\" content=\"%s\">", html.EscapeString(metaDescription))
+	}
+
+	// 2b. Hreflang alternate links
+	scheme := resolveScheme(r)
+	bare := stripLocalePrefix(r.URL.Path)
+	if bare == "" {
+		bare = "/"
+	}
+	enHref := fmt.Sprintf("%s://%s%s", scheme, r.Host, withLocalePrefix(bare, "en"))
+	for _, locale := range []string{"en", "pt", "sv"} {
+		href := fmt.Sprintf("%s://%s%s", scheme, r.Host, withLocalePrefix(bare, locale))
+		injection += fmt.Sprintf("<link rel=\"alternate\" hreflang=\"%s\" href=\"%s\">", locale, href)
+	}
+	injection += fmt.Sprintf("<link rel=\"alternate\" hreflang=\"x-default\" href=\"%s\">", enHref)
+
+	// 2c. Organization JSON-LD
+	schema := organizationSchema{
+		Context:    "https://schema.org",
+		Type:       "Organization",
+		Name:       "Oni Web Officer",
+		URL:        fmt.Sprintf("%s://%s/", scheme, r.Host),
+		KnowsAbout: siteKnowsAbout,
+	}
+	if schemaBytes, err := json.Marshal(schema); err != nil {
+		slog.ErrorContext(r.Context(), "organization schema marshal failed", observability.TraceIDAttr(r.Context()), slog.Any("error", err))
+		observability.CaptureException(r.Context(), err)
+	} else {
+		injection += fmt.Sprintf("<script type=\"application/ld+json\">%s</script>", string(schemaBytes))
+	}
+
 	// Inject before </head>
 	if strings.Contains(htmlStr, "</head>") {
 		htmlStr = strings.Replace(htmlStr, "</head>", injection+"</head>", 1)
@@ -115,7 +236,7 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Inject Title/Meta
-	if metaTitle, ok := translations["meta_title"].(string); ok {
+	if metaTitle, ok := resolveMeta(translations, slug, "title"); ok {
 		newTitleTag := fmt.Sprintf("<title>%s</title>", metaTitle)
 		if strings.Contains(htmlStr, "<title>") && strings.Contains(htmlStr, "</title>") {
 			start := strings.Index(htmlStr, "<title>")

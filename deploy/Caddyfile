@@ -1,0 +1,8 @@
+# __ONI_DOMAIN__ is rendered by bootstrap.sh from ONI_DOMAIN.
+# Caddy obtains and renews the Let's Encrypt certificate automatically and
+# redirects HTTP to HTTPS. It preserves the Host header and sets
+# X-Forwarded-Proto, which internal/handlers/html_handler.go uses to build
+# hreflang and JSON-LD URLs.
+__ONI_DOMAIN__ {
+	reverse_proxy 127.0.0.1:8080
+}

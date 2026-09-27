@@ -83,18 +83,34 @@ func withLocalePrefix(bare, locale string) string {
 	return "/" + locale + bare
 }
 
-// resolveMeta looks up a service-specific "services_<slug>_meta_<field>" key
-// (slug hyphens converted to underscores), falling back to the generic
-// "meta_<field>" key when slug is empty or the specific key isn't present.
-func resolveMeta(translations core.Translations, slug, field string) (string, bool) {
-	if slug != "" {
-		key := "services_" + strings.ReplaceAll(slug, "-", "_") + "_meta_" + field
+// resolveMeta looks up a page-specific "<keyPrefix>_meta_<field>" key, falling
+// back to the generic "meta_<field>" key when keyPrefix is empty or the
+// specific key isn't present. Callers build keyPrefix for the page kind they
+// know about (e.g. "services_<slug>" with hyphens underscored, or the literal
+// "privacy"); resolveMeta itself stays agnostic to page kind.
+func resolveMeta(translations core.Translations, keyPrefix, field string) (string, bool) {
+	if keyPrefix != "" {
+		key := keyPrefix + "_meta_" + field
 		if value, ok := translations[key].(string); ok {
 			return value, true
 		}
 	}
 	value, ok := translations["meta_"+field].(string)
 	return value, ok
+}
+
+// resolveMetaKeyPrefix builds the specific-key prefix resolveMeta uses for a
+// request path (locale prefix included): "services_<slug>" for a service
+// page, the literal "privacy" for /privacy, or "" for any other page (falls
+// through to the generic meta_<field> keys).
+func resolveMetaKeyPrefix(path string) string {
+	if slug := extractServiceSlug(path); slug != "" {
+		return "services_" + strings.ReplaceAll(slug, "-", "_")
+	}
+	if stripLocalePrefix(path) == "/privacy" {
+		return "privacy"
+	}
+	return ""
 }
 
 // siteKnowsAbout is the static, non-translation-driven list of technologies
@@ -192,11 +208,11 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	htmlStr = strings.Replace(htmlStr, "<html>", fmt.Sprintf("<html lang=\"%s\">", lang), 1) // Fallback
 
 	// 2. Inject Data
-	slug := extractServiceSlug(r.URL.Path)
+	metaKeyPrefix := resolveMetaKeyPrefix(r.URL.Path)
 	injection := fmt.Sprintf("<script>window.__INITIAL_STATE__ = %s;</script>", jsonString)
 
 	// 2a. Meta description
-	if metaDescription, ok := resolveMeta(translations, slug, "description"); ok {
+	if metaDescription, ok := resolveMeta(translations, metaKeyPrefix, "description"); ok {
 		injection += fmt.Sprintf("<meta name=\"description\" content=\"%s\">", html.EscapeString(metaDescription))
 	}
 
@@ -236,7 +252,7 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Inject Title/Meta
-	if metaTitle, ok := resolveMeta(translations, slug, "title"); ok {
+	if metaTitle, ok := resolveMeta(translations, metaKeyPrefix, "title"); ok {
 		newTitleTag := fmt.Sprintf("<title>%s</title>", metaTitle)
 		if strings.Contains(htmlStr, "<title>") && strings.Contains(htmlStr, "</title>") {
 			start := strings.Index(htmlStr, "<title>")

@@ -395,34 +395,34 @@ func TestResolveMeta(t *testing.T) {
 	tests := []struct {
 		name         string
 		translations core.Translations
-		slug         string
+		keyPrefix    string
 		field        string
 		wantValue    string
 		wantOK       bool
 	}{
 		{
-			name: "title: slug-specific key present",
+			name: "title: prefix-specific key present",
 			translations: core.Translations{
 				"meta_title": "Generic Title",
 				"services_enterprise_software_meta_title": "Specific Title",
 			},
-			slug:      "enterprise-software",
+			keyPrefix: "services_enterprise_software",
 			field:     "title",
 			wantValue: "Specific Title",
 			wantOK:    true,
 		},
 		{
-			name:         "title: slug-specific key missing falls back to generic",
+			name:         "title: prefix-specific key missing falls back to generic",
 			translations: core.Translations{"meta_title": "Generic Title"},
-			slug:         "enterprise-software",
+			keyPrefix:    "services_enterprise_software",
 			field:        "title",
 			wantValue:    "Generic Title",
 			wantOK:       true,
 		},
 		{
-			name:         "title: empty slug uses generic",
+			name:         "title: empty prefix uses generic",
 			translations: core.Translations{"meta_title": "Generic Title"},
-			slug:         "",
+			keyPrefix:    "",
 			field:        "title",
 			wantValue:    "Generic Title",
 			wantOK:       true,
@@ -430,38 +430,83 @@ func TestResolveMeta(t *testing.T) {
 		{
 			name:         "title: no keys at all returns not-ok",
 			translations: core.Translations{},
-			slug:         "enterprise-software",
+			keyPrefix:    "services_enterprise_software",
 			field:        "title",
 			wantValue:    "",
 			wantOK:       false,
 		},
 		{
-			name: "description: slug-specific key present",
+			name: "description: prefix-specific key present",
 			translations: core.Translations{
 				"meta_description": "Generic Description",
 				"services_enterprise_software_meta_description": "Specific Description",
 			},
-			slug:      "enterprise-software",
+			keyPrefix: "services_enterprise_software",
 			field:     "description",
 			wantValue: "Specific Description",
 			wantOK:    true,
 		},
 		{
-			name:         "description: slug-specific key missing falls back to generic",
+			name:         "description: prefix-specific key missing falls back to generic",
 			translations: core.Translations{"meta_description": "Generic Description"},
-			slug:         "enterprise-software",
+			keyPrefix:    "services_enterprise_software",
 			field:        "description",
 			wantValue:    "Generic Description",
 			wantOK:       true,
+		},
+		{
+			name: "title: privacy prefix uses privacy-specific key",
+			translations: core.Translations{
+				"meta_title":         "Generic Title",
+				"privacy_meta_title": "Privacy Policy | Oni Web Officer",
+			},
+			keyPrefix: "privacy",
+			field:     "title",
+			wantValue: "Privacy Policy | Oni Web Officer",
+			wantOK:    true,
+		},
+		{
+			name: "description: privacy prefix uses privacy-specific key",
+			translations: core.Translations{
+				"meta_description":         "Generic Description",
+				"privacy_meta_description": "How Oni Web Officer handles personal data.",
+			},
+			keyPrefix: "privacy",
+			field:     "description",
+			wantValue: "How Oni Web Officer handles personal data.",
+			wantOK:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotValue, gotOK := resolveMeta(tt.translations, tt.slug, tt.field)
+			gotValue, gotOK := resolveMeta(tt.translations, tt.keyPrefix, tt.field)
 			if gotValue != tt.wantValue || gotOK != tt.wantOK {
 				t.Errorf("resolveMeta(%v, %q, %q) = (%q, %v), want (%q, %v)",
-					tt.translations, tt.slug, tt.field, gotValue, gotOK, tt.wantValue, tt.wantOK)
+					tt.translations, tt.keyPrefix, tt.field, gotValue, gotOK, tt.wantValue, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestResolveMetaKeyPrefix(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "bare service path", path: "/services/enterprise-software", want: "services_enterprise_software"},
+		{name: "locale-prefixed service path", path: "/pt/services/enterprise-software", want: "services_enterprise_software"},
+		{name: "bare privacy path", path: "/privacy", want: "privacy"},
+		{name: "locale-prefixed privacy path", path: "/sv/privacy", want: "privacy"},
+		{name: "home path has no prefix", path: "/", want: ""},
+		{name: "unrelated path has no prefix", path: "/about", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveMetaKeyPrefix(tt.path); got != tt.want {
+				t.Errorf("resolveMetaKeyPrefix(%q) = %q, want %q", tt.path, got, tt.want)
 			}
 		})
 	}

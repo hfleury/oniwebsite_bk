@@ -3,6 +3,7 @@ package services
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -76,4 +77,46 @@ func TestLoadTranslations_SkipsNonJSONFiles(t *testing.T) {
 	if got, want := translations["meta_title"], "English Title"; got != want {
 		t.Errorf("meta_title = %v, want %v", got, want)
 	}
+}
+
+// TestLocalesKeyParity guards the real locales/ directory: every locale file
+// must parse (the server exits at startup otherwise) and pt and sv must each
+// carry exactly the en key set (a missing key renders as the raw key on
+// /pt/ or /sv/).
+func TestLocalesKeyParity(t *testing.T) {
+	svc := NewFileTranslationService("../../locales")
+	if err := svc.LoadTranslations(); err != nil {
+		t.Fatalf("LoadTranslations() returned unexpected error: %v", err)
+	}
+
+	en, err := svc.GetTranslations("en")
+	if err != nil {
+		t.Fatalf("GetTranslations(\"en\") returned unexpected error: %v", err)
+	}
+
+	for _, lang := range []string{"pt", "sv"} {
+		translations, err := svc.GetTranslations(lang)
+		if err != nil {
+			t.Fatalf("GetTranslations(%q) returned unexpected error: %v", lang, err)
+		}
+
+		if missing := keysNotIn(en, translations); len(missing) > 0 {
+			t.Errorf("%s.json is missing keys present in en.json: %v", lang, missing)
+		}
+		if extra := keysNotIn(translations, en); len(extra) > 0 {
+			t.Errorf("%s.json has keys absent from en.json: %v", lang, extra)
+		}
+	}
+}
+
+// keysNotIn returns the sorted keys of from that are absent from other.
+func keysNotIn(from, other map[string]interface{}) []string {
+	var keys []string
+	for key := range from {
+		if _, ok := other[key]; !ok {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }

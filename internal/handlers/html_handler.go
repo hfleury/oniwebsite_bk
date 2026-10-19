@@ -113,6 +113,17 @@ func resolveMetaKeyPrefix(path string) string {
 	return ""
 }
 
+// isUnknownServicePath reports whether path is under /services/ but names no
+// service the locale has meta for. The locale's per-service meta keys are the
+// source of truth for which service ids exist.
+func isUnknownServicePath(path string, translations core.Translations) bool {
+	if !strings.HasPrefix(stripLocalePrefix(path), "/services/") {
+		return false
+	}
+	title, _ := translations[resolveMetaKeyPrefix(path)+"_meta_title"].(string)
+	return title == ""
+}
+
 // siteKnowsAbout is the static, non-translation-driven list of technologies
 // advertised in the site-wide Organization JSON-LD schema.
 var siteKnowsAbout = []string{
@@ -124,6 +135,12 @@ var siteKnowsAbout = []string{
 	"AWS",
 	"Domain-Driven Design",
 	"Event-Driven Architecture",
+	"Large Language Models",
+	"Retrieval-Augmented Generation",
+	"AI Agents",
+	"Secure SDLC",
+	"Threat Modeling",
+	"Software Bill of Materials",
 }
 
 type organizationSchema struct {
@@ -253,7 +270,7 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Inject Title/Meta
 	if metaTitle, ok := resolveMeta(translations, metaKeyPrefix, "title"); ok {
-		newTitleTag := fmt.Sprintf("<title>%s</title>", metaTitle)
+		newTitleTag := fmt.Sprintf("<title>%s</title>", html.EscapeString(metaTitle))
 		if strings.Contains(htmlStr, "<title>") && strings.Contains(htmlStr, "</title>") {
 			start := strings.Index(htmlStr, "<title>")
 			end := strings.Index(htmlStr, "</title>") + 8
@@ -262,6 +279,11 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
+	if isUnknownServicePath(r.URL.Path, translations) {
+		// Still serve the SPA so the client can redirect, but tell crawlers
+		// the page doesn't exist.
+		w.WriteHeader(http.StatusNotFound)
+	}
 	w.Write([]byte(htmlStr))
 }
 

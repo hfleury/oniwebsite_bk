@@ -13,6 +13,7 @@ import (
 
 	"oniwebsite_bk/internal/core"
 	"oniwebsite_bk/internal/middleware"
+	"oniwebsite_bk/internal/services"
 )
 
 const fixtureIndexHTML = `<html lang="en">
@@ -384,6 +385,12 @@ func TestHTMLHandler_ServeHTTP_OrganizationJSONLD(t *testing.T) {
 		`"@type":"Organization"`,
 		`"name":"Oni Web Officer"`,
 		`"Golang"`,
+		`"Large Language Models"`,
+		`"Retrieval-Augmented Generation"`,
+		`"AI Agents"`,
+		`"Secure SDLC"`,
+		`"Threat Modeling"`,
+		`"Software Bill of Materials"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing JSON-LD substring %q, got: %s", want, body)
@@ -497,6 +504,13 @@ func TestResolveMetaKeyPrefix(t *testing.T) {
 	}{
 		{name: "bare service path", path: "/services/enterprise-software", want: "services_enterprise_software"},
 		{name: "locale-prefixed service path", path: "/pt/services/enterprise-software", want: "services_enterprise_software"},
+		{name: "bare cloud-devops path", path: "/services/cloud-devops", want: "services_cloud_devops"},
+		{name: "bare ai-engineering path", path: "/services/ai-engineering", want: "services_ai_engineering"},
+		{name: "bare legacy-modernization path", path: "/services/legacy-modernization", want: "services_legacy_modernization"},
+		{name: "bare security-compliance path", path: "/services/security-compliance", want: "services_security_compliance"},
+		{name: "bare staff-augmentation path", path: "/services/staff-augmentation", want: "services_staff_augmentation"},
+		{name: "sv-prefixed ai-engineering path", path: "/sv/services/ai-engineering", want: "services_ai_engineering"},
+		{name: "pt-prefixed security-compliance path", path: "/pt/services/security-compliance", want: "services_security_compliance"},
 		{name: "bare privacy path", path: "/privacy", want: "privacy"},
 		{name: "locale-prefixed privacy path", path: "/sv/privacy", want: "privacy"},
 		{name: "home path has no prefix", path: "/", want: ""},
@@ -509,5 +523,51 @@ func TestResolveMetaKeyPrefix(t *testing.T) {
 				t.Errorf("resolveMetaKeyPrefix(%q) = %q, want %q", tt.path, got, tt.want)
 			}
 		})
+	}
+}
+
+// serviceIDs mirrors the service ids in the frontend's src/data/services.tsx.
+// The backend has no list of its own, so a new or renamed id must be added
+// here by hand.
+var serviceIDs = []string{
+	"cloud-devops",
+	"ai-engineering",
+	"legacy-modernization",
+	"security-compliance",
+	"enterprise-software",
+	"staff-augmentation",
+}
+
+// TestResolveMeta_RealLocales_AllServiceIds guards the real locales/ files:
+// every service page must get its own title and description in every locale,
+// not the generic site-wide meta.
+func TestResolveMeta_RealLocales_AllServiceIds(t *testing.T) {
+	svc := services.NewFileTranslationService("../../locales")
+	if err := svc.LoadTranslations(); err != nil {
+		t.Fatalf("LoadTranslations() returned unexpected error: %v", err)
+	}
+
+	for _, lang := range []string{"en", "pt", "sv"} {
+		translations, err := svc.GetTranslations(lang)
+		if err != nil {
+			t.Fatalf("GetTranslations(%q) returned unexpected error: %v", lang, err)
+		}
+
+		for _, id := range serviceIDs {
+			keyPrefix := resolveMetaKeyPrefix("/services/" + id)
+			for _, field := range []string{"title", "description"} {
+				t.Run(lang+"/"+id+"/"+field, func(t *testing.T) {
+					got, ok := resolveMeta(translations, keyPrefix, field)
+					if !ok || got == "" {
+						t.Fatalf("resolveMeta(%s, %q, %q) = (%q, %v), want a non-empty value",
+							lang, keyPrefix, field, got, ok)
+					}
+					if generic := translations["meta_"+field]; got == generic {
+						t.Errorf("%s %s %s resolved to the generic meta_%s %q, want a service-specific value",
+							lang, id, field, field, got)
+					}
+				})
+			}
+		}
 	}
 }

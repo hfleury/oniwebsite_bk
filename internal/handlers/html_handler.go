@@ -124,6 +124,12 @@ var siteKnowsAbout = []string{
 	"AWS",
 	"Domain-Driven Design",
 	"Event-Driven Architecture",
+	"Large Language Models",
+	"Retrieval-Augmented Generation",
+	"AI Agents",
+	"Secure SDLC",
+	"Threat Modeling",
+	"Software Bill of Materials",
 }
 
 type organizationSchema struct {

@@ -225,6 +225,68 @@ func TestHTMLHandler_ServeHTTP_ServiceSlugFallsBackToGenericMetaTitle(t *testing
 	if !strings.Contains(body, "<title>Generic Title</title>") {
 		t.Errorf("expected fallback to generic title, got: %s", body)
 	}
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d for an unknown service slug", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHTMLHandler_ServeHTTP_EscapesTitle(t *testing.T) {
+	distDir := writeIndexHTML(t, fixtureIndexHTML)
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"en": {"meta_title": "Security & Compliance <x>"},
+	}}
+	handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+	req := requestWithLang("en")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if want := "<title>Security &amp; Compliance &lt;x&gt;</title>"; !strings.Contains(body, want) {
+		t.Errorf("body missing escaped title %q, got: %s", want, body)
+	}
+}
+
+func TestHTMLHandler_ServeHTTP_ServiceStatus(t *testing.T) {
+	tests := []struct {
+		lang string
+		path string
+		want int
+	}{
+		{lang: "en", path: "/services/bogus", want: http.StatusNotFound},
+		{lang: "pt", path: "/pt/services/bogus", want: http.StatusNotFound},
+		{lang: "sv", path: "/sv/services/bogus", want: http.StatusNotFound},
+		{lang: "en", path: "/services/", want: http.StatusNotFound},
+		{lang: "en", path: "/services/enterprise-software", want: http.StatusOK},
+		{lang: "pt", path: "/pt/services/enterprise-software", want: http.StatusOK},
+		{lang: "en", path: "/", want: http.StatusOK},
+		{lang: "pt", path: "/pt/", want: http.StatusOK},
+		{lang: "en", path: "/privacy", want: http.StatusOK},
+	}
+
+	serviceTranslations := core.Translations{
+		"meta_title": "Generic Title",
+		"services_enterprise_software_meta_title": "Enterprise Software",
+	}
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"en": serviceTranslations,
+		"pt": serviceTranslations,
+		"sv": serviceTranslations,
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			distDir := writeIndexHTML(t, fixtureIndexHTML)
+			handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, requestWithLangAndPath(tt.lang, tt.path))
+
+			if w.Code != tt.want {
+				t.Errorf("GET %s status = %d, want %d", tt.path, w.Code, tt.want)
+			}
+		})
+	}
 }
 
 func TestHTMLHandler_ServeHTTP_NonServicePathUsesGenericMetaTitle(t *testing.T) {
@@ -570,4 +632,38 @@ func TestResolveMeta_RealLocales_AllServiceIds(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestHTMLHandler_ServeHTTP_RealLocales_AllServiceIdsReturn200 guards the
+// coupling between the 404 check and the real locales/ files: every known
+// service page must be served with 200 in every locale.
+func TestHTMLHandler_ServeHTTP_RealLocales_AllServiceIdsReturn200(t *testing.T) {
+	svc := services.NewFileTranslationService("../../locales")
+	if err := svc.LoadTranslations(); err != nil {
+		t.Fatalf("LoadTranslations() returned unexpected error: %v", err)
+	}
+	distDir := writeIndexHTML(t, fixtureIndexHTML)
+	handler := &HTMLHandler{Translator: svc, IsDev: false, DistDir: distDir}
+
+	localePrefixes := map[string]string{"en": "", "pt": "/pt", "sv": "/sv"}
+	for lang, prefix := range localePrefixes {
+		for _, id := range serviceIDs {
+			path := prefix + "/services/" + id
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, requestWithLangAndPath(lang, path))
+				if w.Code != http.StatusOK {
+					t.Errorf("GET %s status = %d, want %d", path, w.Code, http.StatusOK)
+				}
+			})
+		}
+	}
+
+	t.Run("/services/not-a-service", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, requestWithLangAndPath("en", "/services/not-a-service"))
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+		}
+	})
 }

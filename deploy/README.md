@@ -116,12 +116,41 @@ Useful checks: `journalctl -u oniweb -n 50`, `systemctl status oniweb caddy`,
 
 ### Bad-binary drill (proves automatic rollback)
 
-1. On a scratch branch merged to `main` (or by running the deploy manually), ship a
-   deliberately broken `server` (for example a tiny program that exits immediately).
-2. Expect the `deploy` job to go red at the health check, log "rolling back", and leave the
-   previous version serving: `https://<domain>/` still returns 200 and `server` matches
-   `server.prev`.
-3. Deploy a good build to return to normal.
+**Precondition:** a good `server` and `locales/` must already be deployed. On a first-ever
+deploy there is nothing to roll back to, so `deploy-backend` stops `oniweb` instead.
+
+Run it by hand on the droplet as the admin user, at a low-traffic time (the site is down for
+about 10-25 s):
+
+```sh
+cd /opt/oni/oniwebsite_bk
+test -f server && test -d locales && echo precondition-ok        # stop if this doesn't print
+sha256sum server > /tmp/server.before.sha
+printf '#!/bin/sh\nexit 1\n' | sudo -u deploy tee server.new >/dev/null
+sudo -u deploy cp -a locales locales.new
+sudo -u deploy /usr/local/sbin/deploy-backend; echo "exit=$?"
+```
+
+**Do not interrupt it.** The `curl: (7) ... Couldn't connect` lines are the expected failed
+health checks. A Ctrl-C before the rollback leaves the broken binary serving (502); recover with
+the backend [Rollback](#rollback) commands, running `sudo systemctl reset-failed oniweb` before
+the restart.
+
+It passes when the output shows `failed the health check`, `rolling back to server.prev /
+locales.prev` and `rollback complete, previous backend is serving`, then `exit=1`, and:
+
+```sh
+sha256sum -c /tmp/server.before.sha                              # server: OK
+cmp server server.prev && echo identical
+systemctl is-active oniweb                                       # active
+curl -s http://127.0.0.1:8080/api/translations?lang=en | head -c 80; echo   # JSON
+```
+
+and `https://<domain>/` still returns 200 from outside. (The same drill can run through CI by
+merging a deliberately broken `server` to `main` on a scratch branch: the `deploy` job then goes
+red at the health check; deploy a good build afterwards.) If it prints `WARNING: previous backend
+is not healthy after rollback either`, run the backend [Rollback](#rollback) commands and check
+`journalctl -u oniweb -n 50`.
 
 ## Testing the scripts without a droplet
 

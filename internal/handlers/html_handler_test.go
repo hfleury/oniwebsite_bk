@@ -247,7 +247,7 @@ func TestHTMLHandler_ServeHTTP_EscapesTitle(t *testing.T) {
 	}
 }
 
-func TestHTMLHandler_ServeHTTP_ServiceStatus(t *testing.T) {
+func TestHTMLHandler_ServeHTTP_PageStatus(t *testing.T) {
 	tests := []struct {
 		lang string
 		path string
@@ -262,11 +262,23 @@ func TestHTMLHandler_ServeHTTP_ServiceStatus(t *testing.T) {
 		{lang: "en", path: "/", want: http.StatusOK},
 		{lang: "pt", path: "/pt/", want: http.StatusOK},
 		{lang: "en", path: "/privacy", want: http.StatusOK},
+		{lang: "en", path: "/case-studies", want: http.StatusOK},
+		{lang: "pt", path: "/pt/case-studies", want: http.StatusOK},
+		{lang: "sv", path: "/sv/case-studies", want: http.StatusOK},
+		{lang: "en", path: "/case-studies/fixture-study", want: http.StatusOK},
+		{lang: "pt", path: "/pt/case-studies/fixture-study", want: http.StatusOK},
+		{lang: "sv", path: "/sv/case-studies/fixture-study", want: http.StatusOK},
+		{lang: "en", path: "/case-studies/bogus", want: http.StatusNotFound},
+		{lang: "pt", path: "/pt/case-studies/bogus", want: http.StatusNotFound},
+		{lang: "sv", path: "/sv/case-studies/bogus", want: http.StatusNotFound},
+		{lang: "en", path: "/case-studies/", want: http.StatusNotFound},
 	}
 
 	serviceTranslations := core.Translations{
 		"meta_title": "Generic Title",
 		"services_enterprise_software_meta_title": "Enterprise Software",
+		"case_studies_meta_title":                 "Case Studies",
+		"case_studies_fixture_study_meta_title":   "Fixture Study",
 	}
 	fake := &fakeTranslationService{data: map[string]core.Translations{
 		"en": serviceTranslations,
@@ -427,6 +439,60 @@ func TestHTMLHandler_ServeHTTP_HreflangLinks(t *testing.T) {
 	}
 }
 
+func TestHTMLHandler_ServeHTTP_CanonicalLink(t *testing.T) {
+	tests := []struct {
+		lang string
+		path string
+		want string
+	}{
+		{lang: "en", path: "/", want: "http://example.com/"},
+		{lang: "pt", path: "/pt/services/enterprise-software", want: "http://example.com/pt/services/enterprise-software"},
+		{lang: "en", path: "/privacy", want: "http://example.com/privacy"},
+		{lang: "sv", path: "/sv/case-studies", want: "http://example.com/sv/case-studies"},
+		{lang: "pt", path: "/pt/case-studies/fixture-study", want: "http://example.com/pt/case-studies/fixture-study"},
+		{lang: "en", path: "/case-studies/bogus", want: "http://example.com/case-studies/bogus"},
+	}
+
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"en": {"meta_title": "Title"},
+		"pt": {"meta_title": "Titulo"},
+		"sv": {"meta_title": "Titel"},
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			distDir := writeIndexHTML(t, fixtureIndexHTML)
+			handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, requestWithLangAndPath(tt.lang, tt.path))
+
+			body := w.Body.String()
+			wantTag := fmt.Sprintf(`<link rel="canonical" href="%s">`, tt.want)
+			if !strings.Contains(body, wantTag) {
+				t.Errorf("body missing canonical tag %q, got: %s", wantTag, body)
+			}
+			if n := strings.Count(body, `rel="canonical"`); n != 1 {
+				t.Errorf("body has %d canonical tags, want 1", n)
+			}
+		})
+	}
+
+	t.Run("X-Forwarded-Proto sets the scheme", func(t *testing.T) {
+		distDir := writeIndexHTML(t, fixtureIndexHTML)
+		handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+
+		req := requestWithLangAndPath("en", "/case-studies")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if want := `<link rel="canonical" href="https://example.com/case-studies">`; !strings.Contains(w.Body.String(), want) {
+			t.Errorf("body missing %q, got: %s", want, w.Body.String())
+		}
+	})
+}
+
 func TestHTMLHandler_ServeHTTP_OrganizationJSONLD(t *testing.T) {
 	distDir := writeIndexHTML(t, fixtureIndexHTML)
 	fake := &fakeTranslationService{data: map[string]core.Translations{
@@ -575,6 +641,13 @@ func TestResolveMetaKeyPrefix(t *testing.T) {
 		{name: "pt-prefixed security-compliance path", path: "/pt/services/security-compliance", want: "services_security_compliance"},
 		{name: "bare privacy path", path: "/privacy", want: "privacy"},
 		{name: "locale-prefixed privacy path", path: "/sv/privacy", want: "privacy"},
+		{name: "bare case-studies index", path: "/case-studies", want: "case_studies"},
+		{name: "pt case-studies index", path: "/pt/case-studies", want: "case_studies"},
+		{name: "bare case-study detail", path: "/case-studies/cloud-cost-reduction", want: "case_studies_cloud_cost_reduction"},
+		{name: "sv case-study detail", path: "/sv/case-studies/cloud-cost-reduction", want: "case_studies_cloud_cost_reduction"},
+		{name: "case-study detail with trailing segment", path: "/case-studies/cloud-cost-reduction/extra", want: "case_studies_cloud_cost_reduction"},
+		{name: "case-studies trailing slash has no prefix", path: "/case-studies/", want: ""},
+		{name: "services trailing slash has no prefix", path: "/services/", want: ""},
 		{name: "home path has no prefix", path: "/", want: ""},
 		{name: "unrelated path has no prefix", path: "/about", want: ""},
 	}
@@ -666,4 +739,79 @@ func TestHTMLHandler_ServeHTTP_RealLocales_AllServiceIdsReturn200(t *testing.T) 
 			t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
 		}
 	})
+}
+
+// caseStudyIDs mirrors the case-study ids in the frontend's
+// src/data/caseStudies.ts. It ships empty, like that registry; each content
+// ticket adds its id here alongside its case_studies_<id>_* locale keys.
+var caseStudyIDs = []string{}
+
+// TestResolveMeta_RealLocales_CaseStudies guards the real locales/ files: the
+// /case-studies index and every case-study page must get their own title and
+// description in every locale, not the generic site-wide meta.
+func TestResolveMeta_RealLocales_CaseStudies(t *testing.T) {
+	svc := services.NewFileTranslationService("../../locales")
+	if err := svc.LoadTranslations(); err != nil {
+		t.Fatalf("LoadTranslations() returned unexpected error: %v", err)
+	}
+
+	paths := []string{"/case-studies"}
+	for _, id := range caseStudyIDs {
+		paths = append(paths, "/case-studies/"+id)
+	}
+
+	for _, lang := range []string{"en", "pt", "sv"} {
+		translations, err := svc.GetTranslations(lang)
+		if err != nil {
+			t.Fatalf("GetTranslations(%q) returned unexpected error: %v", lang, err)
+		}
+
+		for _, path := range paths {
+			keyPrefix := resolveMetaKeyPrefix(path)
+			for _, field := range []string{"title", "description"} {
+				t.Run(lang+path+"/"+field, func(t *testing.T) {
+					got, ok := resolveMeta(translations, keyPrefix, field)
+					if !ok || got == "" {
+						t.Fatalf("resolveMeta(%s, %q, %q) = (%q, %v), want a non-empty value",
+							lang, keyPrefix, field, got, ok)
+					}
+					if generic := translations["meta_"+field]; got == generic {
+						t.Errorf("%s %s %s resolved to the generic meta_%s %q, want a page-specific value",
+							lang, path, field, field, got)
+					}
+				})
+			}
+		}
+	}
+}
+
+// TestHTMLHandler_ServeHTTP_RealLocales_CaseStudiesStatus guards the coupling
+// between the 404 check and the real locales/ files for case-study routes.
+func TestHTMLHandler_ServeHTTP_RealLocales_CaseStudiesStatus(t *testing.T) {
+	svc := services.NewFileTranslationService("../../locales")
+	if err := svc.LoadTranslations(); err != nil {
+		t.Fatalf("LoadTranslations() returned unexpected error: %v", err)
+	}
+	distDir := writeIndexHTML(t, fixtureIndexHTML)
+	handler := &HTMLHandler{Translator: svc, IsDev: false, DistDir: distDir}
+
+	localePrefixes := map[string]string{"en": "", "pt": "/pt", "sv": "/sv"}
+	for lang, prefix := range localePrefixes {
+		want := map[string]int{
+			prefix + "/case-studies":                  http.StatusOK,
+			prefix + "/case-studies/not-a-case-study": http.StatusNotFound,
+		}
+		for _, id := range caseStudyIDs {
+			want[prefix+"/case-studies/"+id] = http.StatusOK
+		}
+		for path, wantCode := range want {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, requestWithLangAndPath(lang, path))
+				if w.Code != wantCode {
+					t.Errorf("GET %s status = %d, want %d", path, w.Code, wantCode)
+				}
+			})
+		}
+	}
 }

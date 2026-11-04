@@ -161,14 +161,15 @@ func main() {
 // isPageRoute reports whether path is an HTML page served through the
 // language-aware handler: the root, /index.html, the locale roots with and
 // without a trailing slash (the language dropdown links to the bare /pt and
-// /sv), anything nested under them, /services/..., and /privacy (locale-
-// prefixed /pt/privacy and /sv/privacy already match via the /pt/ and /sv/
-// clauses above).
+// /sv), anything nested under them, /services/..., /case-studies and
+// /case-studies/..., and /privacy (locale-prefixed variants already match via
+// the /pt/ and /sv/ clauses above).
 func isPageRoute(path string) bool {
 	return path == "/" || path == "/index.html" ||
 		path == "/pt" || strings_HasPrefix(path, "/pt/") ||
 		path == "/sv" || strings_HasPrefix(path, "/sv/") ||
 		strings_HasPrefix(path, "/services/") ||
+		path == "/case-studies" || strings_HasPrefix(path, "/case-studies/") ||
 		path == "/privacy"
 }
 

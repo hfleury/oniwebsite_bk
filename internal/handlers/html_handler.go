@@ -45,19 +45,48 @@ func stripLocalePrefix(path string) string {
 	return path
 }
 
-// extractServiceSlug returns the first path segment after "/services/" in
-// path (locale prefix stripped first), or "" if path isn't a service page.
-func extractServiceSlug(path string) string {
-	path = stripLocalePrefix(path)
-	const prefix = "/services/"
-	if !strings.HasPrefix(path, prefix) {
-		return ""
+// detailSection pairs the URL section of an id-keyed detail page with the
+// locale key section its per-page keys live under.
+type detailSection struct {
+	urlPrefix  string
+	keySection string
+}
+
+// detailSections lists every id-keyed detail page kind the site serves.
+var detailSections = []detailSection{
+	{urlPrefix: "/services/", keySection: "services"},
+	{urlPrefix: "/case-studies/", keySection: "case_studies"},
+}
+
+// extractDetailSlug returns the first path segment after urlPrefix in bare
+// (a path with its locale prefix already stripped), and whether bare is
+// under urlPrefix at all. The slug is "" for urlPrefix itself.
+func extractDetailSlug(bare, urlPrefix string) (string, bool) {
+	if !strings.HasPrefix(bare, urlPrefix) {
+		return "", false
 	}
-	rest := strings.TrimPrefix(path, prefix)
+	rest := strings.TrimPrefix(bare, urlPrefix)
 	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
 		rest = rest[:slashIdx]
 	}
-	return rest
+	return rest, true
+}
+
+// resolveDetailKeyPrefix reports whether bare is a detail page and, when it
+// names a slug, the key prefix its per-page keys use: "<keySection>_<slug>"
+// with hyphens underscored, or "" for an empty slug.
+func resolveDetailKeyPrefix(bare string) (keyPrefix string, isDetail bool) {
+	for _, section := range detailSections {
+		slug, ok := extractDetailSlug(bare, section.urlPrefix)
+		if !ok {
+			continue
+		}
+		if slug == "" {
+			return "", true
+		}
+		return section.keySection + "_" + strings.ReplaceAll(slug, "-", "_"), true
+	}
+	return "", false
 }
 
 // resolveScheme determines the request scheme, preferring the
@@ -100,27 +129,36 @@ func resolveMeta(translations core.Translations, keyPrefix, field string) (strin
 }
 
 // resolveMetaKeyPrefix builds the specific-key prefix resolveMeta uses for a
-// request path (locale prefix included): "services_<slug>" for a service
-// page, the literal "privacy" for /privacy, or "" for any other page (falls
-// through to the generic meta_<field> keys).
+// request path (locale prefix included): "services_<slug>" or
+// "case_studies_<slug>" for a detail page, the literal "case_studies" for the
+// /case-studies index, the literal "privacy" for /privacy, or "" for any other
+// page (falls through to the generic meta_<field> keys).
 func resolveMetaKeyPrefix(path string) string {
-	if slug := extractServiceSlug(path); slug != "" {
-		return "services_" + strings.ReplaceAll(slug, "-", "_")
+	bare := stripLocalePrefix(path)
+	if keyPrefix, isDetail := resolveDetailKeyPrefix(bare); isDetail {
+		return keyPrefix
 	}
-	if stripLocalePrefix(path) == "/privacy" {
+	switch bare {
+	case "/case-studies":
+		return "case_studies"
+	case "/privacy":
 		return "privacy"
 	}
 	return ""
 }
 
-// isUnknownServicePath reports whether path is under /services/ but names no
-// service the locale has meta for. The locale's per-service meta keys are the
-// source of truth for which service ids exist.
-func isUnknownServicePath(path string, translations core.Translations) bool {
-	if !strings.HasPrefix(stripLocalePrefix(path), "/services/") {
+// isUnknownDetailPath reports whether path is under a detail section
+// (/services/, /case-studies/) but names no id the locale has meta for. The
+// locale's per-page meta keys are the source of truth for which ids exist.
+func isUnknownDetailPath(path string, translations core.Translations) bool {
+	keyPrefix, isDetail := resolveDetailKeyPrefix(stripLocalePrefix(path))
+	if !isDetail {
 		return false
 	}
-	title, _ := translations[resolveMetaKeyPrefix(path)+"_meta_title"].(string)
+	if keyPrefix == "" {
+		return true
+	}
+	title, _ := translations[keyPrefix+"_meta_title"].(string)
 	return title == ""
 }
 
@@ -246,7 +284,10 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	injection += fmt.Sprintf("<link rel=\"alternate\" hreflang=\"x-default\" href=\"%s\">", enHref)
 
-	// 2c. Organization JSON-LD
+	// 2c. Self-referencing canonical link
+	injection += fmt.Sprintf("<link rel=\"canonical\" href=\"%s://%s%s\">", scheme, r.Host, r.URL.Path)
+
+	// 2d. Organization JSON-LD
 	schema := organizationSchema{
 		Context:    "https://schema.org",
 		Type:       "Organization",
@@ -279,7 +320,7 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	if isUnknownServicePath(r.URL.Path, translations) {
+	if isUnknownDetailPath(r.URL.Path, translations) {
 		// Still serve the SPA so the client can redirect, but tell crawlers
 		// the page doesn't exist.
 		w.WriteHeader(http.StatusNotFound)

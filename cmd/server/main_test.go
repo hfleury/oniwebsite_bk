@@ -16,6 +16,10 @@ func TestIsPageRoute(t *testing.T) {
 		{"/sv/", true},
 		{"/sv/services/staff-augmentation", true},
 		{"/services/staff-augmentation", true},
+		{"/case-studies", true},
+		{"/case-studies/cloud-cost-reduction", true},
+		{"/pt/case-studies", true},
+		{"/sv/case-studies/cloud-cost-reduction", true},
 
 		{"/en", false},
 		{"/ptx", false},
@@ -24,6 +28,7 @@ func TestIsPageRoute(t *testing.T) {
 		{"/assets/index-abc123.js", false},
 		{"/api/translations", false},
 		{"/services", false},
+		{"/case-studiesx", false},
 	}
 
 	for _, tt := range tests {

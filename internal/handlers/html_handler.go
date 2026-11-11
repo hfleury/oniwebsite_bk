@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 
 	"oniwebsite_bk/internal/core"
@@ -89,6 +90,27 @@ func resolveDetailKeyPrefix(bare string) (keyPrefix string, isDetail bool) {
 	return "", false
 }
 
+// listDetailIDs returns, sorted, every id that has a
+// "<keySection>_<id>_meta_title" key in translations, with underscores turned
+// back into the URL's hyphens. Like isUnknownDetailPath, it treats the
+// locale's meta keys as the source of truth for which ids exist.
+func listDetailIDs(translations core.Translations, keySection string) []string {
+	prefix := keySection + "_"
+	const suffix = "_meta_title"
+	var ids []string
+	for key := range translations {
+		// The length check rejects the section's own "<keySection>_meta_title"
+		// (e.g. the /case-studies index), where prefix and suffix overlap.
+		if len(key) <= len(prefix)+len(suffix) || !strings.HasPrefix(key, prefix) || !strings.HasSuffix(key, suffix) {
+			continue
+		}
+		id := key[len(prefix) : len(key)-len(suffix)]
+		ids = append(ids, strings.ReplaceAll(id, "_", "-"))
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // resolveScheme determines the request scheme, preferring the
 // X-Forwarded-Proto header (set by a reverse proxy terminating TLS in front
 // of this process) over r.TLS, since main.go only ever calls
@@ -102,6 +124,9 @@ func resolveScheme(r *http.Request) string {
 	}
 	return "http"
 }
+
+// siteLocales lists every locale the site serves, in hreflang order.
+var siteLocales = []string{"en", "pt", "sv"}
 
 // withLocalePrefix returns bare unchanged for the "en" locale, otherwise
 // prefixes it with "/<locale>", mirroring the prefix stripLocalePrefix removes.
@@ -162,6 +187,9 @@ func isUnknownDetailPath(path string, translations core.Translations) bool {
 	return title == ""
 }
 
+// siteName is the brand name used in the JSON-LD and social preview tags.
+const siteName = "Oni Web Officer"
+
 // siteKnowsAbout is the static, non-translation-driven list of technologies
 // advertised in the site-wide Organization JSON-LD schema.
 var siteKnowsAbout = []string{
@@ -187,6 +215,63 @@ type organizationSchema struct {
 	Name       string   `json:"name"`
 	URL        string   `json:"url"`
 	KnowsAbout []string `json:"knowsAbout"`
+}
+
+// ogImagePath is the 1200x630 social preview image, served from the
+// frontend's dist/ (oniwebsite/public/og-image.png).
+const ogImagePath = "/og-image.png"
+
+// ogLocales maps each site locale to its Open Graph locale code.
+var ogLocales = map[string]string{"en": "en_US", "pt": "pt_BR", "sv": "sv_SE"}
+
+// socialPreview holds the per-page values LinkedIn, Facebook and X read from
+// the raw HTML (they don't run the SPA's JavaScript).
+type socialPreview struct {
+	title       string
+	description string
+	url         string
+	imageURL    string
+	locale      string
+}
+
+// socialPreviewTags renders the Open Graph and Twitter card meta tags for p,
+// with every value HTML-escaped. Empty title or description tags are omitted.
+func socialPreviewTags(p socialPreview) string {
+	var b strings.Builder
+	property := func(name, content string) {
+		if content != "" {
+			fmt.Fprintf(&b, "<meta property=\"%s\" content=\"%s\">", name, html.EscapeString(content))
+		}
+	}
+	name := func(name, content string) {
+		if content != "" {
+			fmt.Fprintf(&b, "<meta name=\"%s\" content=\"%s\">", name, html.EscapeString(content))
+		}
+	}
+
+	property("og:type", "website")
+	property("og:site_name", siteName)
+	property("og:title", p.title)
+	property("og:description", p.description)
+	property("og:url", p.url)
+	property("og:image", p.imageURL)
+	property("og:image:width", "1200")
+	property("og:image:height", "630")
+	property("og:image:alt", siteName)
+	if ogLocale, ok := ogLocales[p.locale]; ok {
+		property("og:locale", ogLocale)
+		for _, locale := range siteLocales {
+			if locale != p.locale {
+				property("og:locale:alternate", ogLocales[locale])
+			}
+		}
+	}
+	name("twitter:card", "summary_large_image")
+	name("twitter:title", p.title)
+	name("twitter:description", p.description)
+	name("twitter:image", p.imageURL)
+	name("twitter:image:alt", siteName)
+	return b.String()
 }
 
 func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -278,20 +363,32 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		bare = "/"
 	}
 	enHref := fmt.Sprintf("%s://%s%s", scheme, r.Host, withLocalePrefix(bare, "en"))
-	for _, locale := range []string{"en", "pt", "sv"} {
+	for _, locale := range siteLocales {
 		href := fmt.Sprintf("%s://%s%s", scheme, r.Host, withLocalePrefix(bare, locale))
 		injection += fmt.Sprintf("<link rel=\"alternate\" hreflang=\"%s\" href=\"%s\">", locale, href)
 	}
 	injection += fmt.Sprintf("<link rel=\"alternate\" hreflang=\"x-default\" href=\"%s\">", enHref)
 
 	// 2c. Self-referencing canonical link
-	injection += fmt.Sprintf("<link rel=\"canonical\" href=\"%s://%s%s\">", scheme, r.Host, r.URL.Path)
+	canonicalURL := fmt.Sprintf("%s://%s%s", scheme, r.Host, r.URL.Path)
+	injection += fmt.Sprintf("<link rel=\"canonical\" href=\"%s\">", canonicalURL)
+
+	// 2c'. Social preview (Open Graph + Twitter) tags, reusing the page meta
+	metaTitle, _ := resolveMeta(translations, metaKeyPrefix, "title")
+	metaDescription, _ := resolveMeta(translations, metaKeyPrefix, "description")
+	injection += socialPreviewTags(socialPreview{
+		title:       metaTitle,
+		description: metaDescription,
+		url:         canonicalURL,
+		imageURL:    fmt.Sprintf("%s://%s%s", scheme, r.Host, ogImagePath),
+		locale:      lang,
+	})
 
 	// 2d. Organization JSON-LD
 	schema := organizationSchema{
 		Context:    "https://schema.org",
 		Type:       "Organization",
-		Name:       "Oni Web Officer",
+		Name:       siteName,
 		URL:        fmt.Sprintf("%s://%s/", scheme, r.Host),
 		KnowsAbout: siteKnowsAbout,
 	}

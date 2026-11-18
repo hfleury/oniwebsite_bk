@@ -59,6 +59,11 @@ func main() {
 	// 2. Initialize Handlers
 	htmlHandler := handlers.NewHTMLHandler(translator, *devMode, distDir)
 	translationHandler := handlers.NewTranslationHandler(translator)
+	// Crawler files the backend generates, served ahead of every other route.
+	crawlerFiles := map[string]http.Handler{
+		"/robots.txt":  handlers.RobotsHandler{},
+		"/sitemap.xml": handlers.NewSitemapHandler(translator),
+	}
 
 	// 3. Setup Router
 	// We wrap the HTML handler with the language detector
@@ -80,6 +85,11 @@ func main() {
 		// Strategy: Custom root handler that decides.
 		rootMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
+
+			if crawlerFile, ok := crawlerFiles[path]; ok {
+				crawlerFile.ServeHTTP(w, r)
+				return
+			}
 
 			// API Routes (Manual check because we aren't using the mux directly here)
 			// Better: use the mux for everything and have the proxy be the "fallback" pattern?
@@ -118,6 +128,11 @@ func main() {
 
 		rootMux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := r.URL.Path
+
+			if crawlerFile, ok := crawlerFiles[path]; ok {
+				crawlerFile.ServeHTTP(w, r)
+				return
+			}
 
 			// I18n Routes
 			if isPageRoute(path) {

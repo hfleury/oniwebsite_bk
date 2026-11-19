@@ -743,9 +743,9 @@ func TestHTMLHandler_ServeHTTP_RealLocales_AllServiceIdsReturn200(t *testing.T) 
 }
 
 // caseStudyIDs mirrors the case-study ids in the frontend's
-// src/data/caseStudies.ts. It ships empty, like that registry; each content
-// ticket adds its id here alongside its case_studies_<id>_* locale keys.
-var caseStudyIDs = []string{}
+// src/data/caseStudies.ts. Each content ticket adds its id here alongside its
+// case_studies_<id>_* locale keys.
+var caseStudyIDs = []string{"cloud-cost-reduction"}
 
 // TestResolveMeta_RealLocales_CaseStudies guards the real locales/ files: the
 // /case-studies index and every case-study page must get their own title and

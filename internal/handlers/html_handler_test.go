@@ -495,35 +495,42 @@ func TestHTMLHandler_ServeHTTP_CanonicalLink(t *testing.T) {
 }
 
 func TestHTMLHandler_ServeHTTP_OrganizationJSONLD(t *testing.T) {
-	distDir := writeIndexHTML(t, fixtureIndexHTML)
 	fake := &fakeTranslationService{data: map[string]core.Translations{
 		"en": {"meta_title": "Some Title"},
+		"pt": {"meta_title": "Algum Titulo"},
+		"sv": {"meta_title": "Någon Titel"},
 	}}
-	handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
 
-	req := requestWithLang("en")
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	for _, lang := range []string{"en", "pt", "sv"} {
+		t.Run(lang, func(t *testing.T) {
+			distDir := writeIndexHTML(t, fixtureIndexHTML)
+			handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
 
-	body := w.Body.String()
-	if !strings.Contains(body, `<script type="application/ld+json">`) {
-		t.Errorf("body missing JSON-LD script tag, got: %s", body)
-	}
-	for _, want := range []string{
-		`"@context":"https://schema.org"`,
-		`"@type":"Organization"`,
-		`"name":"Oni Web Officer"`,
-		`"Golang"`,
-		`"Large Language Models"`,
-		`"Retrieval-Augmented Generation"`,
-		`"AI Agents"`,
-		`"Secure SDLC"`,
-		`"Threat Modeling"`,
-		`"Software Bill of Materials"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("body missing JSON-LD substring %q, got: %s", want, body)
-		}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, requestWithLang(lang))
+
+			body := w.Body.String()
+			if !strings.Contains(body, `<script type="application/ld+json">`) {
+				t.Errorf("body missing JSON-LD script tag, got: %s", body)
+			}
+			for _, want := range []string{
+				`"@context":"https://schema.org"`,
+				`"@type":"Organization"`,
+				`"name":"Oni Web Officer"`,
+				`"Golang"`,
+				`"Large Language Models"`,
+				`"Retrieval-Augmented Generation"`,
+				`"AI Agents"`,
+				`"Secure SDLC"`,
+				`"Threat Modeling"`,
+				`"Software Bill of Materials"`,
+				`"sameAs":["https://www.linkedin.com/company/webofficer/"]`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("body missing JSON-LD substring %q, got: %s", want, body)
+				}
+			}
+		})
 	}
 }
 

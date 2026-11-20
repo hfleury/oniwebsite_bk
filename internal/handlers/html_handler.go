@@ -209,12 +209,20 @@ var siteKnowsAbout = []string{
 	"Software Bill of Materials",
 }
 
+// siteSameAs lists the live external profiles of the organization, so search
+// engines can tie them to this site's entity. The frontend's
+// src/data/profiles.ts mirrors this list; change both together.
+var siteSameAs = []string{
+	"https://www.linkedin.com/company/webofficer/",
+}
+
 type organizationSchema struct {
 	Context    string   `json:"@context"`
 	Type       string   `json:"@type"`
 	Name       string   `json:"name"`
 	URL        string   `json:"url"`
 	KnowsAbout []string `json:"knowsAbout"`
+	SameAs     []string `json:"sameAs,omitempty"`
 }
 
 // ogImagePath is the 1200x630 social preview image, served from the
@@ -391,6 +399,7 @@ func (h *HTMLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Name:       siteName,
 		URL:        fmt.Sprintf("%s://%s/", scheme, r.Host),
 		KnowsAbout: siteKnowsAbout,
+		SameAs:     siteSameAs,
 	}
 	if schemaBytes, err := json.Marshal(schema); err != nil {
 		slog.ErrorContext(r.Context(), "organization schema marshal failed", observability.TraceIDAttr(r.Context()), slog.Any("error", err))

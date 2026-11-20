@@ -28,6 +28,7 @@
     "services_enterprise_software_description": "Projetamos e construímos plataformas escaláveis e de alto desempenho para fintechs e pagamentos. Especialistas em Arquitetura Orientada a Eventos e DDD, criamos backends que mantêm a consistência mesmo com grandes volumes de transações.",
     "services_legacy_modernization_title": "Modernização de Sistemas Legados com IA",
     "services_legacy_modernization_description": "Resgatamos empresas da dívida técnica. Nossas squads usam análise e refatoração assistidas por IA para mapear sistemas desatualizados (Node.js, PHP, monólitos legados) e migrar caminhos críticos para padrões modernos.",
+    "services_legacy_modernization_proof_point": "Já reescrevemos endpoints Node.js de produção em Go para uma plataforma de transporte público.",
     "services_cloud_devops_title": "Otimização de Custos em Nuvem e Engenharia de Plataforma",
     "services_cloud_devops_description": "Reduzimos o desperdício em nuvem com FinOps e operamos sua plataforma como engenheiros de plataforma e SRE dedicados. Da visibilidade de custos à automação de CI/CD (Kubernetes/Helm), mantemos a infraestrutura segura e eficiente.",
     "services_staff_augmentation_title": "Alocação Gerenciada de Talentos de TI",

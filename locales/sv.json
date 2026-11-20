@@ -28,6 +28,7 @@
     "services_enterprise_software_description": "Vi designar och bygger skalbara plattformar med hög prestanda för fintech och betalningar. Med specialisering på händelsedriven arkitektur och DDD skapar vi backends som håller stora transaktionsvolymer konsekventa.",
     "services_legacy_modernization_title": "AI-stödd modernisering av äldre system",
     "services_legacy_modernization_description": "Vi hjälper företag ur den tekniska skulden. Våra squads använder AI-stödd analys och refaktorering för att kartlägga föråldrade system (Node.js, PHP, äldre monoliter) och migrera kritiska flöden till moderna standarder.",
+    "services_legacy_modernization_proof_point": "Vi har skrivit om Node.js-endpoints i produktion till Go för en plattform för kollektivtrafik.",
     "services_cloud_devops_title": "Optimering av molnkostnader och plattformsutveckling",
     "services_cloud_devops_description": "Vi minskar slöseriet i molnet med FinOps och driver sedan din plattform med förvaltade plattforms- och SRE-ingenjörer. Från kostnadsinsyn till automatiserad CI/CD (Kubernetes/Helm) håller vi infrastrukturen säker och effektiv.",
     "services_staff_augmentation_title": "Konsultförstärkning inom IT",

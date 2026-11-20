@@ -28,6 +28,7 @@
     "services_enterprise_software_description": "We design and build high-performance, scalable platforms for fintech and payments. Specializing in Event-Driven Architecture and DDD, we create backends that keep heavy transaction volumes consistent.",
     "services_legacy_modernization_title": "AI-Assisted Legacy Modernization",
     "services_legacy_modernization_description": "We rescue businesses from technical debt. Our squads use AI-assisted analysis and refactoring to map outdated systems (Node.js, PHP, legacy monoliths) and migrate critical paths to modern standards.",
+    "services_legacy_modernization_proof_point": "We've rewritten production Node.js endpoints in Go for a public-transport platform.",
     "services_cloud_devops_title": "Cloud Cost Optimization & Platform Engineering",
     "services_cloud_devops_description": "We cut cloud waste with FinOps, then run your platform as managed platform and SRE engineers. From cost visibility to automated CI/CD (Kubernetes/Helm), we keep infrastructure secure and efficient.",
     "services_staff_augmentation_title": "Managed IT Staff Augmentation",

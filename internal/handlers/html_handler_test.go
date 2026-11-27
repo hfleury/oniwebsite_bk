@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -494,35 +495,42 @@ func TestHTMLHandler_ServeHTTP_CanonicalLink(t *testing.T) {
 }
 
 func TestHTMLHandler_ServeHTTP_OrganizationJSONLD(t *testing.T) {
-	distDir := writeIndexHTML(t, fixtureIndexHTML)
 	fake := &fakeTranslationService{data: map[string]core.Translations{
 		"en": {"meta_title": "Some Title"},
+		"pt": {"meta_title": "Algum Titulo"},
+		"sv": {"meta_title": "Någon Titel"},
 	}}
-	handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
 
-	req := requestWithLang("en")
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	for _, lang := range []string{"en", "pt", "sv"} {
+		t.Run(lang, func(t *testing.T) {
+			distDir := writeIndexHTML(t, fixtureIndexHTML)
+			handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
 
-	body := w.Body.String()
-	if !strings.Contains(body, `<script type="application/ld+json">`) {
-		t.Errorf("body missing JSON-LD script tag, got: %s", body)
-	}
-	for _, want := range []string{
-		`"@context":"https://schema.org"`,
-		`"@type":"Organization"`,
-		`"name":"Oni Web Officer"`,
-		`"Golang"`,
-		`"Large Language Models"`,
-		`"Retrieval-Augmented Generation"`,
-		`"AI Agents"`,
-		`"Secure SDLC"`,
-		`"Threat Modeling"`,
-		`"Software Bill of Materials"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("body missing JSON-LD substring %q, got: %s", want, body)
-		}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, requestWithLang(lang))
+
+			body := w.Body.String()
+			if !strings.Contains(body, `<script type="application/ld+json">`) {
+				t.Errorf("body missing JSON-LD script tag, got: %s", body)
+			}
+			for _, want := range []string{
+				`"@context":"https://schema.org"`,
+				`"@type":"Organization"`,
+				`"name":"Oni Web Officer"`,
+				`"Golang"`,
+				`"Large Language Models"`,
+				`"Retrieval-Augmented Generation"`,
+				`"AI Agents"`,
+				`"Secure SDLC"`,
+				`"Threat Modeling"`,
+				`"Software Bill of Materials"`,
+				`"sameAs":["https://www.linkedin.com/company/webofficer/"]`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("body missing JSON-LD substring %q, got: %s", want, body)
+				}
+			}
+		})
 	}
 }
 
@@ -742,9 +750,9 @@ func TestHTMLHandler_ServeHTTP_RealLocales_AllServiceIdsReturn200(t *testing.T) 
 }
 
 // caseStudyIDs mirrors the case-study ids in the frontend's
-// src/data/caseStudies.ts. It ships empty, like that registry; each content
-// ticket adds its id here alongside its case_studies_<id>_* locale keys.
-var caseStudyIDs = []string{}
+// src/data/caseStudies.ts. Each content ticket adds its id here alongside its
+// case_studies_<id>_* locale keys.
+var caseStudyIDs = []string{"cloud-cost-reduction", "event-driven-marketplace"}
 
 // TestResolveMeta_RealLocales_CaseStudies guards the real locales/ files: the
 // /case-studies index and every case-study page must get their own title and
@@ -812,6 +820,130 @@ func TestHTMLHandler_ServeHTTP_RealLocales_CaseStudiesStatus(t *testing.T) {
 					t.Errorf("GET %s status = %d, want %d", path, w.Code, wantCode)
 				}
 			})
+		}
+	}
+}
+
+func TestListDetailIDs(t *testing.T) {
+	translations := core.Translations{
+		"meta_title":                            "Site",
+		"case_studies_meta_title":               "Case Studies",
+		"case_studies_heading":                  "Results",
+		"case_studies_cloud_savings_meta_title": "Cloud savings",
+		"case_studies_ai_rollout_meta_title":    "AI rollout",
+		"services_cloud_devops_meta_title":      "Cloud",
+		"services_cloud_devops_title":           "Cloud & DevOps",
+	}
+
+	tests := []struct {
+		keySection string
+		want       []string
+	}{
+		{keySection: "case_studies", want: []string{"ai-rollout", "cloud-savings"}},
+		{keySection: "services", want: []string{"cloud-devops"}},
+		{keySection: "privacy", want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.keySection, func(t *testing.T) {
+			got := listDetailIDs(translations, tt.keySection)
+			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
+				t.Errorf("listDetailIDs(%q) = %v, want %v", tt.keySection, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestListDetailIDs_RealLocales guards that the ids the sitemap derives from
+// the real en locale match the hand-mirrored frontend registries.
+func TestListDetailIDs_RealLocales(t *testing.T) {
+	svc := services.NewFileTranslationService("../../locales")
+	if err := svc.LoadTranslations(); err != nil {
+		t.Fatalf("LoadTranslations() returned unexpected error: %v", err)
+	}
+	translations, err := svc.GetTranslations("en")
+	if err != nil {
+		t.Fatalf("GetTranslations(en) returned unexpected error: %v", err)
+	}
+
+	for keySection, want := range map[string][]string{"services": serviceIDs, "case_studies": caseStudyIDs} {
+		sorted := append([]string(nil), want...)
+		sort.Strings(sorted)
+		got := listDetailIDs(translations, keySection)
+		if fmt.Sprint(got) != fmt.Sprint(sorted) {
+			t.Errorf("listDetailIDs(en, %q) = %v, want %v", keySection, got, sorted)
+		}
+	}
+}
+
+func TestHTMLHandler_ServeHTTP_SocialPreviewTags(t *testing.T) {
+	fake := &fakeTranslationService{data: map[string]core.Translations{
+		"en": {"meta_title": "Oni", "meta_description": "Site"},
+		"pt": {
+			"meta_title":                             "Oni PT",
+			"services_cloud_devops_meta_title":       `Nuvem & "DevOps"`,
+			"services_cloud_devops_meta_description": "Descrição",
+		},
+	}}
+
+	t.Run("per page and locale", func(t *testing.T) {
+		distDir := writeIndexHTML(t, fixtureIndexHTML)
+		handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+		req := requestWithLangAndPath("pt", "/pt/services/cloud-devops")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		body := w.Body.String()
+		for _, want := range []string{
+			`<meta property="og:type" content="website">`,
+			`<meta property="og:site_name" content="Oni Web Officer">`,
+			`<meta property="og:title" content="Nuvem &amp; &#34;DevOps&#34;">`,
+			`<meta property="og:description" content="Descrição">`,
+			`<meta property="og:url" content="https://example.com/pt/services/cloud-devops">`,
+			`<meta property="og:image" content="https://example.com/og-image.png">`,
+			`<meta property="og:image:width" content="1200">`,
+			`<meta property="og:image:height" content="630">`,
+			`<meta property="og:locale" content="pt_BR">`,
+			`<meta property="og:locale:alternate" content="en_US">`,
+			`<meta property="og:locale:alternate" content="sv_SE">`,
+			`<meta name="twitter:card" content="summary_large_image">`,
+			`<meta name="twitter:title" content="Nuvem &amp; &#34;DevOps&#34;">`,
+			`<meta name="twitter:image" content="https://example.com/og-image.png">`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("body missing %q, got: %s", want, body)
+			}
+		}
+		if strings.Contains(body, `<meta property="og:locale:alternate" content="pt_BR">`) {
+			t.Errorf("og:locale:alternate repeats the page's own locale")
+		}
+	})
+
+	t.Run("og:url matches the canonical", func(t *testing.T) {
+		distDir := writeIndexHTML(t, fixtureIndexHTML)
+		handler := &HTMLHandler{Translator: fake, IsDev: false, DistDir: distDir}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, requestWithLangAndPath("en", "/"))
+
+		body := w.Body.String()
+		for _, want := range []string{
+			`<link rel="canonical" href="http://example.com/">`,
+			`<meta property="og:url" content="http://example.com/">`,
+			`<meta property="og:title" content="Oni">`,
+			`<meta property="og:locale" content="en_US">`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("body missing %q, got: %s", want, body)
+			}
+		}
+	})
+}
+
+func TestSocialPreviewTags_OmitsEmptyCopy(t *testing.T) {
+	got := socialPreviewTags(socialPreview{url: "http://example.com/", imageURL: "http://example.com/og-image.png", locale: "en"})
+	for _, absent := range []string{"og:title", "og:description", "twitter:title", "twitter:description"} {
+		if strings.Contains(got, absent) {
+			t.Errorf("tags include %s with no copy: %s", absent, got)
 		}
 	}
 }
